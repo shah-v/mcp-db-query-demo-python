@@ -1,42 +1,55 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-(async () => {
+async function testQueryDatabase(query: string) {
+  // Set up the transport to talk to server.ts
   const transport = new StdioClientTransport({
     command: "npx",
-    args: ["ts-node", "server.ts"]
+    args: ["ts-node", "server.ts"], // This runs your server
   });
 
+  // Create a client to send requests
   const client = new Client({
-    name: "farming-client",
-    version: "1.0.0"
+    name: "test-client",
+    version: "1.0.0",
   });
 
   try {
+    // Connect to the server
     await client.connect(transport);
 
-    // Fetch farm info
-    const farmInfoResult = await client.callTool({
-      name: "get_farm_info",
-      arguments: { farmName: "Green Acres" }
+    // Send a query to the query_database tool
+    const result = await client.callTool({
+      name: "query_database",
+      arguments: { query },
     });
-    const farmContent = farmInfoResult.content as { type: string; text: string }[];
-    console.log("Farm Info:", farmContent[0].text);
 
-    // Fetch crops
-    const cropsResult = await client.callTool({
-      name: "get_crops_by_farm",
-      arguments: { farmName: "Green Acres" }
-    });
-    const cropsContent = cropsResult.content as { type: string; text: string }[];
-    console.log("Crops:", cropsContent[0].text);
-
+    // Show the response
+    const content = result.content as { type: string; text: string }[];
+    console.log(`Query: "${query}"\nResponse:`, content[0].text);
   } catch (error) {
     console.error("Error:", error);
   } finally {
-    // Cleanup (assuming 'close' exists)
+    // Clean up by closing the client
     if (typeof client.close === "function") {
       await client.close();
     }
+  }
+}
+
+// Some test queries to try out
+const testQueries = [
+  "how many farms",
+  "list all farms",
+  "crops in Green Acres",
+  "tell me about Sunny Fields",
+  "which farms grow wheat",
+  "what's the weather like", // This one’s unsupported, so we can test the error message
+];
+
+// Run all the test queries
+(async () => {
+  for (const query of testQueries) {
+    await testQueryDatabase(query);
   }
 })();
