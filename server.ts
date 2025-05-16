@@ -5,6 +5,8 @@ import { promisify } from "util";
 import { z } from "zod";
 import { URL } from "url";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import * as dotenv from 'dotenv';
+dotenv.config();
 
 // Database connection helper
 const getDb = () => {
@@ -22,7 +24,10 @@ const server = new McpServer({
 });
 
 // Set up Gemini API client
-const apiKey = "GEMINI_API_KEY"; // Replace with your actual API key or use process.env.GEMINI_API_KEY
+const apiKey = process.env.GEMINI_API_KEY || "";
+if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not set in the .env file");
+}
 const genAI = new GoogleGenerativeAI(apiKey);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
