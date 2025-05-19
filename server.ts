@@ -10,17 +10,17 @@ dotenv.config();
 
 // Database connection helper
 const getDb = () => {
-  const db = new sqlite3.Database("farming.db");
-  return {
-    all: promisify(db.all.bind(db)) as (sql: string, params: any[]) => Promise<any[]>,
-    close: promisify(db.close.bind(db)) as () => Promise<void>,
-  };
+    const db = new sqlite3.Database("farming.db");
+    return {
+        all: promisify(db.all.bind(db)) as (sql: string, params: any[]) => Promise<any[]>,
+        close: promisify(db.close.bind(db)) as () => Promise<void>,
+    };
 };
 
 // Initialize MCP Server
 const server = new McpServer({
-  name: "Farming Database Server",
-  version: "1.0.0",
+    name: "Farming Database Server",
+    version: "1.0.0",
 });
 
 // Set up Gemini API client
@@ -45,48 +45,55 @@ async function generateSqlWithGemini(userQuery: string): Promise<string> {
     const result = await model.generateContent(prompt);
     const response = result.response;
     const text = response.text();
-  
+
     // Extract the SQL query from the markdown code block
     const sqlMatch = text.match(/```sql\n([\s\S]*?)\n```/);
     if (sqlMatch) {
-      return sqlMatch[1].trim();  // Return the clean SQL query
+        return sqlMatch[1].trim();  // Return the clean SQL query
     } else {
-      throw new Error("No SQL query found in the response.");
+        throw new Error("No SQL query found in the response.");
     }
-  }
+}
 
 // Function to execute SQL on the database
 async function executeSql(sql: string): Promise<any> {
-  const db = getDb();
-  try {
-    const rows = await db.all(sql, []);
-    return rows; // Returns the query results
-  } finally {
-    await db.close();
-  }
+    const db = getDb();
+    try {
+        const rows = await db.all(sql, []);
+        return rows; // Returns the query results
+    } finally {
+        await db.close();
+    }
 }
 
 // Define the "query_database" tool for MCP
 server.tool(
-  "query_database",
-  { query: z.string() },
-  async (args, extra) => {
-    const userQuery = args.query; // Example: "how many farms are there?"
-    try {
-      const sqlQuery = await generateSqlWithGemini(userQuery);
-      const result = await executeSql(sqlQuery);
-      return { content: [{ type: "text", text: JSON.stringify(result) }] };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: `Error: ${error.message}` }],
-        isError: true,
-      };
+    "query_database",
+    { query: z.string() },
+    async (args, extra) => {
+        const userQuery = args.query;
+        try {
+            const sqlQuery = await generateSqlWithGemini(userQuery);
+            const result = await executeSql(sqlQuery);
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: JSON.stringify({ results: result, sqlQuery }),
+                    },
+                ],
+            };
+        } catch (error: any) {
+            return {
+                content: [{ type: "text", text: `Error: ${error.message}` }],
+                isError: true,
+            };
+        }
     }
-  }
 );
 
 // Start the server
 (async () => {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
 })().catch(console.error);
