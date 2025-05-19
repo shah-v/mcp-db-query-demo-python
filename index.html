@@ -1,110 +1,206 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Farming Database Query System</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        .animate-pulse {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0.5;
-            }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Farming Database Query System</title>
+  <!-- Add Tailwind CSS and Font Awesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .animate-pulse {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        <!-- Header -->
-        <header class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-800">Farming Database Query System</h1>
-            <p class="text-gray-600">Ask questions about farms, crops, and harvests in plain English</p>
-        </header>
+  <div id="root"></div>
 
-        <!-- Main Content -->
-        <div class="bg-white rounded-xl shadow-md overflow-hidden p-6">
-            <!-- Query Input Section -->
-            <h2 class="text-xl font-semibold text-gray-800 mb-4">Ask Your Question</h2>
-            <div class="mb-4">
-                <p class="text-sm text-gray-600 mb-2">Try these examples:</p>
-                <div class="flex flex-wrap gap-2 mb-4">
-                    <button class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm hover:bg-blue-200" onclick="setQuery('How many farms are there?')">How many farms?</button>
-                    <button class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm hover:bg-blue-200" onclick="setQuery('List all crops in Green Acres')">Crops in Green Acres</button>
-                    <button class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm hover:bg-blue-200" onclick="setQuery('Which farms grow wheat?')">Farms growing wheat</button>
-                </div>
-            </div>
-            <div class="relative mb-6">
-                <textarea id="queryInput" class="w-full h-24 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Type your question here..."></textarea>
-                <button onclick="executeQuery()" class="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center">
-                    <i class="fas fa-play mr-2"></i> Ask
+  <!-- Load React and Babel via CDN (unchanged) -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    function App() {
+      const [messages, setMessages] = useState([]);
+      const [input, setInput] = useState('');
+      const [isLoading, setIsLoading] = useState(false); // Added for loading states
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!input.trim()) return;
+
+        // Add user message
+        setMessages(prev => [...prev, { type: 'user', content: input }]);
+        setInput('');
+        setIsLoading(true); // Start loading
+
+        // Send query to the API
+        try {
+          const response = await fetch('/api/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: input }),
+          });
+          const data = await response.json();
+          setMessages(prev => [...prev, { 
+            type: 'system', 
+            content: { results: JSON.stringify(data.results), sqlQuery: data.sqlQuery }
+          }]);
+        } catch (error) {
+          setMessages(prev => [...prev, { type: 'system', content: 'Error: ' + error.message }]);
+        } finally {
+          setIsLoading(false); // End loading
+        }
+      };
+
+      const setQuery = (query) => {
+        setInput(query); // For example buttons
+      };
+
+      return (
+        <div className="container mx-auto px-4 py-8">
+          {/* Header */}
+          <header className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-800">Farming Database Query System</h1>
+            <p className="text-gray-600">Ask questions about farms, crops, and harvests in plain English</p>
+          </header>
+
+          {/* Main Content */}
+          <div className="bg-white rounded-xl shadow-md overflow-hidden p-6">
+            {/* Query Input Section */}
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">Ask Your Question</h2>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">Try these examples:</p>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <button 
+                  className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm hover:bg-blue-200" 
+                  onClick={() => setQuery('How many farms are there?')}
+                >
+                  How many farms?
                 </button>
+                <button 
+                  className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm hover:bg-blue-200" 
+                  onClick={() => setQuery('List all crops in Green Acres')}
+                >
+                  Crops in Green Acres
+                </button>
+                <button 
+                  className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm hover:bg-blue-200" 
+                  onClick={() => setQuery('Which farms grow wheat?')}
+                >
+                  Farms growing wheat
+                </button>
+              </div>
             </div>
+            <form className="relative mb-6" onSubmit={handleSubmit}>
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                className="w-full h-24 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Ask about farms, crops, or harvests..."
+              ></textarea>
+              <button
+                type="submit"
+                className="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center"
+                disabled={isLoading}
+              >
+                <i className="fas fa-play mr-2"></i> Ask
+              </button>
+            </form>
 
-            <!-- Generated SQL Section -->
-            <h3 class="text-lg font-medium text-gray-700 mb-2">Generated SQL Query</h3>
-            <div id="sqlQuery" class="bg-gray-800 text-green-400 p-4 rounded-lg font-mono text-sm overflow-x-auto">
-                <p>-- Your generated SQL will appear here</p>
-            </div>
-
-            <!-- Results Section -->
-            <h3 class="text-lg font-medium text-gray-700 mb-2 mt-6">Query Results</h3>
-            <div id="queryResults" class="border border-gray-200 rounded-lg overflow-hidden">
-                <div class="p-8 text-center text-gray-500">
-                    <i class="fas fa-database text-4xl mb-2 text-gray-300"></i>
-                    <p>Results will be displayed here after you ask a question</p>
+            {/* Messages Display */}
+            <div>
+              {messages.map((msg, index) => (
+                <div key={index} className="mb-6">
+                  {msg.type === 'user' ? (
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <p className="text-blue-800">{msg.content}</p>
+                    </div>
+                  ) : (
+                    <div>
+                      {/* Generated SQL */}
+                      <h3 className="text-lg font-medium text-gray-700 mb-2">Generated SQL Query</h3>
+                      <div className="bg-gray-800 text-green-400 p-4 rounded-lg font-mono text-sm overflow-x-auto mb-6">
+                        {msg.content.sqlQuery ? (
+                          <p>{msg.content.sqlQuery}</p>
+                        ) : (
+                          <p className="text-red-400">{msg.content}</p>
+                        )}
+                      </div>
+                      {/* Results */}
+                      <h3 className="text-lg font-medium text-gray-700 mb-2">Query Results</h3>
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        {msg.content.results ? (
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                {Object.keys(JSON.parse(msg.content.results)[0]).map((header, i) => (
+                                  <th key={i} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    {header}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {JSON.parse(msg.content.results).map((row, rowIndex) => (
+                                <tr key={rowIndex}>
+                                  {Object.values(row).map((value, colIndex) => (
+                                    <td key={colIndex} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                      {value}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <div className="p-8 text-center text-gray-500">
+                            <i className="fas fa-exclamation-triangle text-4xl mb-2 text-yellow-400"></i>
+                            <p>{msg.content}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
+              ))}
+              {isLoading && (
+                <div>
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">Generated SQL Query</h3>
+                  <div className="bg-gray-800 text-green-400 p-4 rounded-lg font-mono text-sm overflow-x-auto mb-6">
+                    <p className="text-gray-400 animate-pulse">Generating SQL...</p>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">Query Results</h3>
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="p-8 text-center">
+                      <div className="animate-pulse rounded-full h-8 w-8 bg-blue-200 mx-auto mb-2"></div>
+                      <p className="text-gray-500">Executing query...</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {messages.length === 0 && !isLoading && (
+                <div className="text-center text-gray-500 mt-6">
+                  <i className="fas fa-database text-4xl mb-2 text-gray-300"></i>
+                  <p>Results will be displayed here after you ask a question</p>
+                </div>
+              )}
             </div>
+          </div>
         </div>
-    </div>
+      );
+    }
 
-    <script>
-        function setQuery(query) {
-            document.getElementById('queryInput').value = query;
-        }
-
-        function executeQuery() {
-            const query = document.getElementById('queryInput').value.trim();
-            if (!query) {
-                alert('Please enter a question');
-                return;
-            }
-
-            // Show loading states
-            document.getElementById('sqlQuery').innerHTML = '<p class="text-gray-400 animate-pulse">Generating SQL...</p>';
-            document.getElementById('queryResults').innerHTML = '<div class="p-8 text-center"><div class="animate-pulse rounded-full h-8 w-8 bg-blue-200 mx-auto mb-2"></div><p class="text-gray-500">Executing query...</p></div>';
-
-            // Placeholder simulation (replace with your backend logic)
-            setTimeout(() => {
-                const sql = 'SELECT * FROM farms WHERE name = "Green Acres"';
-                const results = `
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Green Acres</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">California</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                `;
-                document.getElementById('sqlQuery').innerHTML = `<p class="text-green-400">${sql}</p>`;
-                document.getElementById('queryResults').innerHTML = results;
-            }, 1000);
-        }
-    </script>
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
 </body>
 </html>
