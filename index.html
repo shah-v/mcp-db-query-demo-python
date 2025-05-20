@@ -20,7 +20,7 @@
 <body class="bg-gray-50 min-h-screen">
   <div id="root"></div>
 
-  <!-- Load React and Babel via CDN (unchanged) -->
+  <!-- Load React and Babel via CDN -->
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -31,18 +31,16 @@
     function App() {
       const [messages, setMessages] = useState([]);
       const [input, setInput] = useState('');
-      const [isLoading, setIsLoading] = useState(false); // Added for loading states
+      const [isLoading, setIsLoading] = useState(false);
 
       const handleSubmit = async (e) => {
         e.preventDefault();
         if (!input.trim()) return;
 
-        // Add user message
         setMessages(prev => [...prev, { type: 'user', content: input }]);
         setInput('');
-        setIsLoading(true); // Start loading
+        setIsLoading(true);
 
-        // Send query to the API
         try {
           const response = await fetch('/api/query', {
             method: 'POST',
@@ -50,19 +48,16 @@
             body: JSON.stringify({ query: input }),
           });
           const data = await response.json();
-          setMessages(prev => [...prev, { 
-            type: 'system', 
-            content: { results: JSON.stringify(data.results), sqlQuery: data.sqlQuery }
-          }]);
+          setMessages(prev => [...prev, { type: 'system', content: data }]);
         } catch (error) {
           setMessages(prev => [...prev, { type: 'system', content: 'Error: ' + error.message }]);
         } finally {
-          setIsLoading(false); // End loading
+          setIsLoading(false);
         }
       };
 
       const setQuery = (query) => {
-        setInput(query); // For example buttons
+        setInput(query);
       };
 
       return (
@@ -96,12 +91,12 @@
                             <p>{msg.content.sqlQuery || 'No SQL query generated'}</p>
                           </div>
                           <h3 className="text-lg font-medium text-gray-700 mb-2">Query Results</h3>
-                          <div className="border border-gray-200 rounded-lg overflow-hidden">
-                            {msg.content.results && JSON.parse(msg.content.results).length > 0 ? (
+                          <div className="border border-gray-200 rounded-lg overflow-hidden mb-6">
+                            {msg.content.results && msg.content.results.length > 0 ? (
                               <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                   <tr>
-                                    {Object.keys(JSON.parse(msg.content.results)[0]).map((header, i) => (
+                                    {Object.keys(msg.content.results[0]).map((header, i) => (
                                       <th
                                         key={i}
                                         className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -112,7 +107,7 @@
                                   </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
-                                  {JSON.parse(msg.content.results).map((row, rowIndex) => (
+                                  {msg.content.results.map((row, rowIndex) => (
                                     <tr key={rowIndex}>
                                       {Object.values(row).map((value, colIndex) => (
                                         <td
@@ -132,6 +127,10 @@
                                 <p>No results found.</p>
                               </div>
                             )}
+                          </div>
+                          <h3 className="text-lg font-medium text-gray-700 mb-2">Explanation</h3>
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <p className="text-gray-800">{msg.content.explanation}</p>
                           </div>
                         </div>
                       )}
@@ -181,9 +180,9 @@
                 </button>
                 <button 
                   className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm hover:bg-blue-200" 
-                  onClick={() => setQuery('Which farms grow wheat?')}
+                  onClick={() => setQuery('What is wheat?')}
                 >
-                  Farms growing wheat
+                  What is wheat?
                 </button>
               </div>
             </div>

@@ -31,27 +31,47 @@ if (!apiKey) {
 const genAI = new GoogleGenerativeAI(apiKey);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// Define the database schema for Gemini
+// Define the database schema with examples for Gemini
 const schemaInfo = `
 You have a database with these tables:
 - farms: id, name, location
 - crops: id, farm_id, type, planting_date
 - harvests: id, crop_id, harvest_date, quantity
+
+Examples of user queries and corresponding SQL queries:
+1. User query: "List all farms"
+   SQL: SELECT * FROM farms;
+
+2. User query: "Crops in Green Acres"
+   SQL: SELECT * FROM crops WHERE farm_id = (SELECT id FROM farms WHERE name = 'Green Acres');
+
+3. User query: "What is wheat?"
+   SQL: SELECT c.*, f.name as farm_name, h.harvest_date, h.quantity 
+        FROM crops c 
+        JOIN farms f ON c.farm_id = f.id 
+        LEFT JOIN harvests h ON c.id = h.crop_id 
+        WHERE c.type = 'wheat';
+
+4. User query: "How many farms are there?"
+   SQL: SELECT COUNT(*) FROM farms;
+
+Based on the user's query, generate an appropriate SQL query to retrieve the relevant information.
 `;
 
 // Function to generate SQL with Gemini
 async function generateSqlWithGemini(userQuery: string): Promise<string> {
-    const prompt = `${schemaInfo}\n\nBased on the user's query: '${userQuery}', generate an SQL query to retrieve the answer.`;
+    const prompt = `${schemaInfo}\n\nUser query: '${userQuery}'\nBased on the user's query, generate an appropriate SQL query to retrieve the relevant information, and wrap it in a code block like in the examples.\nSQL:`;
     const result = await model.generateContent(prompt);
     const response = result.response;
     const text = response.text();
 
-    // Extract the SQL query from the markdown code block
-    const sqlMatch = text.match(/```sql\n([\s\S]*?)\n```/);
+    // Extract the SQL query from the Markdown code block
+    const sqlMatch = text.match(/```(?:sql)?\n([\s\S]*?)\n```/);
     if (sqlMatch) {
         return sqlMatch[1].trim();  // Return the clean SQL query
     } else {
-        throw new Error("No SQL query found in the response.");
+        // Fallback: if no code block is found, assume the entire response is the SQL query
+        return text.trim();
     }
 }
 
@@ -66,6 +86,20 @@ async function executeSql(sql: string): Promise<any> {
     }
 }
 
+// Function to generate explanation with Gemini
+async function generateExplanation(userQuery: string, results: any[]): Promise<string> {
+    let prompt;
+    if (results.length === 0) {
+        prompt = `The user's query was: '${userQuery}'. No data was found in the database. Provide a natural language response indicating that no information is available.`;
+    } else {
+        prompt = `The user's query was: '${userQuery}'. The database returned the following results: ${JSON.stringify(results)}. Provide a concise natural language summary of these results, strictly based on the data provided. Do not include any information not present in the results.`;
+    }
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const text = response.text();
+    return text;
+}
+
 // Define the "query_database" tool for MCP
 server.tool(
     "query_database",
@@ -75,11 +109,12 @@ server.tool(
         try {
             const sqlQuery = await generateSqlWithGemini(userQuery);
             const result = await executeSql(sqlQuery);
+            const explanation = await generateExplanation(userQuery, result);
             return {
                 content: [
                     {
                         type: "text",
-                        text: JSON.stringify({ results: result, sqlQuery }),
+                        text: JSON.stringify({ results: result, sqlQuery, explanation }),
                     },
                 ],
             };
