@@ -18,14 +18,24 @@ app.use(cors({ origin: 'http://localhost:3000' })); // Allow requests from front
 // Global variable to store schema
 let schemaInfo: string | null = null;
 
+let schemaLoadPromise: Promise<void> | null = null;
+
 // Load schemaInfo from file at startup
-(async () => {
+schemaLoadPromise = (async () => {
     try {
         schemaInfo = await fs.readFile('schema.txt', 'utf8');
     } catch (error) {
         console.log('No schema file found yet; schemaInfo remains null.');
     }
 })();
+
+// Function to ensure schema is loaded before proceeding
+async function ensureSchemaLoaded() {
+    if (schemaLoadPromise) {
+        await schemaLoadPromise;
+        schemaLoadPromise = null; // Clear after loading
+    }
+}
 
 // Function to generate schema from SQLite database
 async function generateSchemaInfo(): Promise<string> {
@@ -159,6 +169,7 @@ server.tool(
     "query_database",
     { query: z.string() },
     async (args, extra) => {
+        await ensureSchemaLoaded(); // Ensure schema is loaded before proceeding
         if (!schemaInfo) {
             return {
                 content: [{ type: "text", text: "Error: Database schema not loaded." }],
@@ -187,8 +198,9 @@ server.tool(
     }
 );
 
-// Start the server
+// Start the server after ensuring schema is loaded
 (async () => {
+    await ensureSchemaLoaded(); // Wait for schema to load
     const transport = new StdioServerTransport();
     await server.connect(transport);
 })().catch(console.error);
