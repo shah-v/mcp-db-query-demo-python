@@ -64,6 +64,15 @@ app.post('/api/load-db', async (req, res) => {
     }
 });
 
+app.get('/api/is-db-loaded', async (req, res) => {
+    try {
+        await fs.access('schema.txt');
+        res.json({ loaded: true });
+    } catch (error) {
+        res.json({ loaded: false });
+    }
+});
+
 // Start Express server on port 3001
 app.listen(3001, () => {
     console.log('API server running on port 3001');
