@@ -3,10 +3,71 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import sqlite3 from "sqlite3";
 import { promisify } from "util";
 import { z } from "zod";
-import { URL } from "url";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import express from 'express';
+import cors from 'cors';
 import * as dotenv from 'dotenv';
+import fs from 'fs/promises';
 dotenv.config();
+
+// Initialize Express app
+const app = express();
+app.use(express.json());
+app.use(cors({ origin: 'http://localhost:3000' })); // Allow requests from frontend on port 3000
+
+// Global variable to store schema
+let schemaInfo: string | null = null;
+
+// Load schemaInfo from file at startup
+(async () => {
+    try {
+        schemaInfo = await fs.readFile('schema.txt', 'utf8');
+    } catch (error) {
+        console.log('No schema file found yet; schemaInfo remains null.');
+    }
+})();
+
+// Function to generate schema from SQLite database
+async function generateSchemaInfo(): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const db = new sqlite3.Database('farming.db'); // Adjust to your database path
+        db.all("SELECT name FROM sqlite_master WHERE type='table';", [], async (err, tables) => {
+            if (err) {
+                db.close();
+                return reject(err);
+            }
+            let schema = '';
+            for (const table of tables as Array<{ name: string }>) {
+                const columns = await new Promise<any[]>((res, rej) => {
+                    db.all(`PRAGMA table_info(${table.name});`, [], (e, rows) => {
+                        if (e) rej(e);
+                        else res(rows);
+                    });
+                });
+                const columnNames = columns.map(col => col.name).join(', ');
+                schema += `- ${table.name}: ${columnNames}\n`;
+            }
+            db.close();
+            resolve(schema);
+        });
+    });
+}
+
+// Define /api/load-db endpoint
+app.post('/api/load-db', async (req, res) => {
+    try {
+        schemaInfo = await generateSchemaInfo();
+        await fs.writeFile('schema.txt', schemaInfo); // Save to file
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Start Express server on port 3001
+app.listen(3001, () => {
+    console.log('API server running on port 3001');
+});
 
 // Database connection helper
 const getDb = () => {
@@ -30,33 +91,6 @@ if (!apiKey) {
 }
 const genAI = new GoogleGenerativeAI(apiKey);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-// Define the database schema with examples for Gemini
-const schemaInfo = `
-You have a database with these tables:
-- farms: id, name, location
-- crops: id, farm_id, type, planting_date
-- harvests: id, crop_id, harvest_date, quantity
-
-Examples of user queries and corresponding SQL queries:
-1. User query: "List all farms"
-   SQL: SELECT * FROM farms;
-
-2. User query: "Crops in Green Acres"
-   SQL: SELECT * FROM crops WHERE farm_id = (SELECT id FROM farms WHERE name = 'Green Acres');
-
-3. User query: "What is wheat?"
-   SQL: SELECT c.*, f.name as farm_name, h.harvest_date, h.quantity 
-        FROM crops c 
-        JOIN farms f ON c.farm_id = f.id 
-        LEFT JOIN harvests h ON c.id = h.crop_id 
-        WHERE c.type = 'wheat';
-
-4. User query: "How many farms are there?"
-   SQL: SELECT COUNT(*) FROM farms;
-
-Based on the user's query, generate an appropriate SQL query to retrieve the relevant information.
-`;
 
 // Function to generate SQL with Gemini
 async function generateSqlWithGemini(userQuery: string): Promise<string> {
@@ -100,11 +134,28 @@ async function generateExplanation(userQuery: string, results: any[]): Promise<s
     return text;
 }
 
+// server.tool(
+//     "load_database",
+//     { schema: z.string() },
+//     async (args, extra) => {
+//         schemaInfo = args.schema;
+//         return {
+//             content: [{ type: "text", text: "Database loaded successfully." }],
+//         };
+//     }
+// );
+
 // Define the "query_database" tool for MCP
 server.tool(
     "query_database",
     { query: z.string() },
     async (args, extra) => {
+        if (!schemaInfo) {
+            return {
+                content: [{ type: "text", text: "Error: Database schema not loaded." }],
+                isError: true,
+            };
+        }
         const userQuery = args.query;
         try {
             const sqlQuery = await generateSqlWithGemini(userQuery);
