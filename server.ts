@@ -1,13 +1,9 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import sqlite3 from "sqlite3";
-import { promisify } from "util";
-import { z } from "zod";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import express from 'express';
 import cors from 'cors';
-import * as dotenv from 'dotenv';
+import sqlite3 from "sqlite3";
+import { promisify } from "util";
 import fs from 'fs/promises';
+import * as dotenv from 'dotenv';
 dotenv.config();
 
 // Initialize Express app
@@ -18,57 +14,33 @@ app.use(cors({ origin: 'http://localhost:3000' })); // Allow requests from front
 // Global variable to store schema
 let schemaInfo: string | null = null;
 
-let schemaLoadPromise: Promise<void> | null = null;
-
-// Load schemaInfo from file at startup
-schemaLoadPromise = (async () => {
-    try {
-        schemaInfo = await fs.readFile('schema.txt', 'utf8');
-    } catch (error) {
-        console.log('No schema file found yet; schemaInfo remains null.');
-    }
-})();
-
-// Function to ensure schema is loaded before proceeding
-async function ensureSchemaLoaded() {
-    if (schemaLoadPromise) {
-        await schemaLoadPromise;
-        schemaLoadPromise = null; // Clear after loading
-    }
-}
+// Database connection helper
+const getDb = () => {
+    const db = new sqlite3.Database("farming.db");
+    return {
+        all: promisify(db.all.bind(db)) as (sql: string, params: any[]) => Promise<any[]>,
+        close: promisify(db.close.bind(db)) as () => Promise<void>,
+    };
+};
 
 // Function to generate schema from SQLite database
 async function generateSchemaInfo(): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const db = new sqlite3.Database('farming.db');
-        db.all("SELECT name FROM sqlite_master WHERE type='table';", [], async (err, tables) => {
-            if (err) {
-                db.close();
-                return reject(err);
+    const db = getDb();
+    try {
+        const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';", []);
+        let schemaText = "Database Schema:\n";
+        for (const table of tables) {
+            const tableName = table.name;
+            schemaText += `\nTable: ${tableName}\n`;
+            const columns = await db.all(`PRAGMA table_info(${tableName});`, []);
+            for (const column of columns) {
+                schemaText += `  - ${column.name} (${column.type}${column.pk ? ', PRIMARY KEY' : ''}${column.notnull ? ', NOT NULL' : ''})\n`;
             }
-            try {
-                const tablePromises = (tables as Array<{ name: string }>).map(table =>
-                    new Promise<any[]>((res, rej) => {
-                        db.all(`PRAGMA table_info(${table.name});`, [], (e, rows) => {
-                            if (e) rej(e);
-                            else res(rows);
-                        });
-                    }).then(columns => ({ name: table.name, columns }))
-                );
-                const tableData = await Promise.all(tablePromises);
-                let schema = '';
-                for (const { name, columns } of tableData) {
-                    const columnNames = columns.map(col => col.name).join(', ');
-                    schema += `- ${name}: ${columnNames}\n`;
-                }
-                db.close();
-                resolve(schema);
-            } catch (error) {
-                db.close();
-                reject(error);
-            }
-        });
-    });
+        }
+        return schemaText;
+    } finally {
+        await db.close();
+    }
 }
 
 // Define /api/load-db endpoint
@@ -95,120 +67,3 @@ app.get('/api/is-db-loaded', async (req, res) => {
 app.listen(3001, () => {
     console.log('API server running on port 3001');
 });
-
-// Database connection helper
-const getDb = () => {
-    const db = new sqlite3.Database("farming.db");
-    return {
-        all: promisify(db.all.bind(db)) as (sql: string, params: any[]) => Promise<any[]>,
-        close: promisify(db.close.bind(db)) as () => Promise<void>,
-    };
-};
-
-// Initialize MCP Server
-const server = new McpServer({
-    name: "Farming Database Server",
-    version: "1.0.0",
-});
-
-// Set up Gemini API client
-const apiKey = process.env.GEMINI_API_KEY || "";
-if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set in the .env file");
-}
-const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-// Function to generate SQL with Gemini
-async function generateSqlWithGemini(userQuery: string): Promise<string> {
-    const prompt = `${schemaInfo}\n\nUser query: '${userQuery}'\nBased on the user's query, generate an appropriate SQL query to retrieve the relevant information, and wrap it in a code block like in the examples.\nSQL:`;
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
-
-    // Extract the SQL query from the Markdown code block
-    const sqlMatch = text.match(/```(?:sql)?\n([\s\S]*?)\n```/);
-    if (sqlMatch) {
-        return sqlMatch[1].trim();  // Return the clean SQL query
-    } else {
-        // Fallback: if no code block is found, assume the entire response is the SQL query
-        return text.trim();
-    }
-}
-
-// Function to execute SQL on the database
-async function executeSql(sql: string): Promise<any> {
-    const db = getDb();
-    try {
-        const rows = await db.all(sql, []);
-        return rows; // Returns the query results
-    } finally {
-        await db.close();
-    }
-}
-
-// Function to generate explanation with Gemini
-async function generateExplanation(userQuery: string, results: any[]): Promise<string> {
-    let prompt;
-    if (results.length === 0) {
-        prompt = `The user's query was: '${userQuery}'. No data was found in the database. Provide a natural language response indicating that no information is available.`;
-    } else {
-        prompt = `The user's query was: '${userQuery}'. The database returned the following results: ${JSON.stringify(results)}. Provide a concise natural language summary of these results, strictly based on the data provided. Do not include any information not present in the results.`;
-    }
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
-    return text;
-}
-
-// server.tool(
-//     "load_database",
-//     { schema: z.string() },
-//     async (args, extra) => {
-//         schemaInfo = args.schema;
-//         return {
-//             content: [{ type: "text", text: "Database loaded successfully." }],
-//         };
-//     }
-// );
-
-// Define the "query_database" tool for MCP
-server.tool(
-    "query_database",
-    { query: z.string() },
-    async (args, extra) => {
-        await ensureSchemaLoaded(); // Ensure schema is loaded before proceeding
-        if (!schemaInfo) {
-            return {
-                content: [{ type: "text", text: "Error: Database schema not loaded." }],
-                isError: true,
-            };
-        }
-        const userQuery = args.query;
-        try {
-            const sqlQuery = await generateSqlWithGemini(userQuery);
-            const result = await executeSql(sqlQuery);
-            const explanation = await generateExplanation(userQuery, result);
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: JSON.stringify({ results: result, sqlQuery, explanation }),
-                    },
-                ],
-            };
-        } catch (error: any) {
-            return {
-                content: [{ type: "text", text: `Error: ${error.message}` }],
-                isError: true,
-            };
-        }
-    }
-);
-
-// Start the server after ensuring schema is loaded
-(async () => {
-    await ensureSchemaLoaded(); // Wait for schema to load
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-})().catch(console.error);
