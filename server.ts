@@ -40,25 +40,33 @@ async function ensureSchemaLoaded() {
 // Function to generate schema from SQLite database
 async function generateSchemaInfo(): Promise<string> {
     return new Promise((resolve, reject) => {
-        const db = new sqlite3.Database('farming.db'); // Adjust to your database path
+        const db = new sqlite3.Database('farming.db');
         db.all("SELECT name FROM sqlite_master WHERE type='table';", [], async (err, tables) => {
             if (err) {
                 db.close();
                 return reject(err);
             }
-            let schema = '';
-            for (const table of tables as Array<{ name: string }>) {
-                const columns = await new Promise<any[]>((res, rej) => {
-                    db.all(`PRAGMA table_info(${table.name});`, [], (e, rows) => {
-                        if (e) rej(e);
-                        else res(rows);
-                    });
-                });
-                const columnNames = columns.map(col => col.name).join(', ');
-                schema += `- ${table.name}: ${columnNames}\n`;
+            try {
+                const tablePromises = (tables as Array<{ name: string }>).map(table =>
+                    new Promise<any[]>((res, rej) => {
+                        db.all(`PRAGMA table_info(${table.name});`, [], (e, rows) => {
+                            if (e) rej(e);
+                            else res(rows);
+                        });
+                    }).then(columns => ({ name: table.name, columns }))
+                );
+                const tableData = await Promise.all(tablePromises);
+                let schema = '';
+                for (const { name, columns } of tableData) {
+                    const columnNames = columns.map(col => col.name).join(', ');
+                    schema += `- ${name}: ${columnNames}\n`;
+                }
+                db.close();
+                resolve(schema);
+            } catch (error) {
+                db.close();
+                reject(error);
             }
-            db.close();
-            resolve(schema);
         });
     });
 }
