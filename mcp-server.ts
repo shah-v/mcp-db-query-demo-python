@@ -29,14 +29,21 @@ async function ensureSchemaLoaded() {
     }
 }
 
-// Database connection helper
-const getDb = () => {
-    const db = new sqlite3.Database("farming.db");
-    return {
-        all: promisify(db.all.bind(db)) as (sql: string, params: any[]) => Promise<any[]>,
-        close: promisify(db.close.bind(db)) as () => Promise<void>,
+// Global database connection
+let db: {
+    all: (sql: string, params: any[]) => Promise<any[]>;
+    close: () => Promise<void>;
+} | null = null;
+
+// Function to initialize the database connection
+async function initDb() {
+    const sqliteDb = new sqlite3.Database("farming.db");
+    db = {
+        all: promisify(sqliteDb.all.bind(sqliteDb)) as (sql: string, params: any[]) => Promise<any[]>,
+        close: promisify(sqliteDb.close.bind(sqliteDb)) as () => Promise<void>,
     };
-};
+    console.log('Database connection opened');
+}
 
 // Initialize MCP Server
 const server = new McpServer({
@@ -64,13 +71,11 @@ async function generateSqlWithGemini(userQuery: string): Promise<string> {
 
 // Function to execute SQL on the database
 async function executeSql(sql: string): Promise<any> {
-    const db = getDb();
-    try {
-        const rows = await db.all(sql, []);
-        return rows;
-    } finally {
-        await db.close();
+    if (!db) {
+        throw new Error('Database connection not initialized');
     }
+    const rows = await db.all(sql, []);
+    return rows;
 }
 
 // Function to generate explanation with Gemini
@@ -114,15 +119,29 @@ server.tool(
     }
 );
 
-// Start the MCP server after loading schema
+// Start the MCP server after loading schema and initializing DB
 (async () => {
     try {
         await loadSchema(); // Load schema first
+        await initDb();     // Initialize the database connection
         const transport = new StdioServerTransport();
         await server.connect(transport);
         console.log('MCP server running with StdioServerTransport');
     } catch (error) {
         console.error('Failed to start MCP server:', error);
-        process.exit(1); // Exit if schema loading fails
+        process.exit(1); // Exit if schema loading or DB init fails
     }
 })();
+
+// Function to close the database connection
+async function closeDb() {
+    if (db) {
+        await db.close();
+        console.log('Database connection closed');
+    }
+}
+
+// Handle process cleanup
+process.on('exit', () => {
+    closeDb().catch(console.error);
+});
