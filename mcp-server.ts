@@ -11,22 +11,21 @@ dotenv.config();
 // Global variable to store schema
 let schemaInfo: string | null = null;
 
-let schemaLoadPromise: Promise<void> | null = null;
-
-// Load schemaInfo from file at startup
-schemaLoadPromise = (async () => {
+// Load schemaInfo from file
+async function loadSchema() {
     try {
         schemaInfo = await fs.readFile('schema.txt', 'utf8');
+        console.log('Schema loaded successfully from disk.');
     } catch (error) {
-        console.log('No schema file found yet; schemaInfo remains null.');
+        console.error('Failed to load schema.txt:', error);
+        throw new Error('Schema file not found or unreadable');
     }
-})();
+}
 
-// Function to ensure schema is loaded before proceeding
+// Function to ensure schema is loaded
 async function ensureSchemaLoaded() {
-    if (schemaLoadPromise) {
-        await schemaLoadPromise;
-        schemaLoadPromise = null; // Clear after loading
+    if (!schemaInfo) {
+        throw new Error('Schema not loaded');
     }
 }
 
@@ -60,11 +59,7 @@ async function generateSqlWithGemini(userQuery: string): Promise<string> {
     const response = result.response;
     const text = response.text();
     const sqlMatch = text.match(/```(?:sql)?\n([\s\S]*?)\n```/);
-    if (sqlMatch) {
-        return sqlMatch[1].trim();
-    } else {
-        return text.trim();
-    }
+    return sqlMatch ? sqlMatch[1].trim() : text.trim();
 }
 
 // Function to execute SQL on the database
@@ -88,8 +83,7 @@ async function generateExplanation(userQuery: string, results: any[]): Promise<s
     }
     const result = await model.generateContent(prompt);
     const response = result.response;
-    const text = response.text();
-    return text;
+    return response.text();
 }
 
 // Define the "query_database" tool for MCP
@@ -97,13 +91,7 @@ server.tool(
     "query_database",
     { query: z.string() },
     async (args, extra) => {
-        await ensureSchemaLoaded(); // Ensure schema is loaded before proceeding
-        if (!schemaInfo) {
-            return {
-                content: [{ type: "text", text: "Error: Database schema not loaded." }],
-                isError: true,
-            };
-        }
+        await ensureSchemaLoaded();
         const userQuery = args.query;
         try {
             const sqlQuery = await generateSqlWithGemini(userQuery);
@@ -126,10 +114,15 @@ server.tool(
     }
 );
 
-// Start the MCP server after ensuring schema is loaded
+// Start the MCP server after loading schema
 (async () => {
-    await ensureSchemaLoaded(); // Wait for schema to load
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.log('MCP server running with StdioServerTransport');
-})().catch(console.error);
+    try {
+        await loadSchema(); // Load schema first
+        const transport = new StdioServerTransport();
+        await server.connect(transport);
+        console.log('MCP server running with StdioServerTransport');
+    } catch (error) {
+        console.error('Failed to start MCP server:', error);
+        process.exit(1); // Exit if schema loading fails
+    }
+})();
