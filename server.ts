@@ -45,6 +45,7 @@ async function generateSchemaInfo(): Promise<string> {
 
 // Define /api/load-db endpoint
 app.post('/api/load-db', async (req, res) => {
+    console.log('SERVER: /api/load-db hit');
     try {
         schemaInfo = await generateSchemaInfo();
         await fs.writeFile('schema.txt', schemaInfo); // Save to file
@@ -55,6 +56,7 @@ app.post('/api/load-db', async (req, res) => {
 });
 
 app.get('/api/is-db-loaded', async (req, res) => {
+    console.log('SERVER: /api/is-db-loaded hit');
     try {
         await fs.access('schema.txt');
         res.json({ loaded: true });

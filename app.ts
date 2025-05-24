@@ -3,6 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { z } from 'zod';
 import { spawn } from 'child_process';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 const QueryToolSchema = z.object({
     content: z.array(z.object({ text: z.string() })),
@@ -10,8 +11,15 @@ const QueryToolSchema = z.object({
   });
 
 const app = express();
+
+// Proxy requests to server.ts on port 3001
+app.use('/api/load-db', createProxyMiddleware({ target: 'http://localhost:3001/api/load-db', changeOrigin: true,  logger: console }));
+app.use('/api/is-db-loaded', createProxyMiddleware({ target: 'http://localhost:3001/api/is-db-loaded', changeOrigin: true, logger: console }));
+
 app.use(express.json()); // Parse JSON request bodies
 app.use(express.static('.')); // Serve static files like index.html
+
+
 
 // Spawn the MCP server subprocess once at startup
 const mcpProcess = spawn('npx', ['ts-node', 'mcp-server.ts'], {

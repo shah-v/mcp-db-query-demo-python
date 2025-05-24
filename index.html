@@ -38,7 +38,7 @@
       useEffect(() => {
         const checkDbLoaded = async () => {
           try {
-            const response = await fetch('http://localhost:3001/api/is-db-loaded');
+            const response = await fetch('/api/is-db-loaded');
             const data = await response.json();
             if (data.loaded) {
               setIsDbLoaded(true);
@@ -86,7 +86,7 @@
         }
         setIsDbLoading(true);
         try {
-          const response = await fetch('http://localhost:3001/api/load-db', { method: 'POST' });
+          const response = await fetch('/api/load-db', { method: 'POST' });
           const data = await response.json();
           if (data.success) {
             setIsDbLoaded(true);
