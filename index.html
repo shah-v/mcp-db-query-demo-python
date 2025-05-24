@@ -28,6 +28,24 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
+    // Retry function with exponential backoff
+    async function fetchWithRetry(url, options = {}, retries = 3, backoff = 300) {
+      try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response;
+      } catch (error) {
+        if (retries > 0) {
+          console.log(`Retrying request to ${url}... attempts left: ${retries}`);
+          await new Promise(resolve => setTimeout(resolve, backoff));
+          return fetchWithRetry(url, options, retries - 1, backoff * 2);
+        }
+        throw error;
+      }
+    }
+
     function App() {
       const [messages, setMessages] = useState([]);
       const [input, setInput] = useState('');
@@ -38,13 +56,13 @@
       useEffect(() => {
         const checkDbLoaded = async () => {
           try {
-            const response = await fetch('/api/is-db-loaded');
+            const response = await fetchWithRetry('/api/is-db-loaded');
             const data = await response.json();
             if (data.loaded) {
               setIsDbLoaded(true);
             }
           } catch (error) {
-            console.error('Error checking database load status:', error);
+            console.error('Error checking database load status after retries:', error);
           }
         };
         checkDbLoaded();
@@ -61,16 +79,12 @@
         setInput('');
         setIsQueryLoading(true);
         try {
-          const response = await fetch('/api/query', {
+          const response = await fetchWithRetry('/api/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query: input }),
           });
-          if (!response.ok) {
-            const errorText = await response.text(); // Get the raw text if response isn’t OK
-            throw new Error(errorText);
-          }
-          const data = await response.json(); // Parse as JSON only if response is OK
+          const data = await response.json();
           setMessages(prev => [...prev, { type: 'system', content: data }]);
         } catch (error) {
           setMessages(prev => [...prev, { type: 'system', content: 'Error: ' + error.message }]);
@@ -86,7 +100,7 @@
         }
         setIsDbLoading(true);
         try {
-          const response = await fetch('/api/load-db', { method: 'POST' });
+          const response = await fetchWithRetry('/api/load-db', { method: 'POST' });
           const data = await response.json();
           if (data.success) {
             setIsDbLoaded(true);
