@@ -19,53 +19,70 @@ app.use('/api/is-db-loaded', createProxyMiddleware({ target: 'http://localhost:3
 app.use(express.json()); // Parse JSON request bodies
 app.use(express.static('.')); // Serve static files like index.html
 
-
-
-// Spawn the MCP server subprocess once at startup
-const mcpProcess = spawn('npx', ['ts-node', 'mcp-server.ts'], {
-  stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-});
-
-// Create the transport and client
+// Create the transport using the existing process
 const transport = new StdioClientTransport({
-  command: "npx",
-  args: ["ts-node", "mcp-server.ts"]
+  command: 'npx',
+  args: ['ts-node', 'mcp-server.ts'],
 });
+
 const client = new Client({ name: 'web-client', version: '1.0.0' });
 
-// Connect the client to the MCP server (do this once)
-client.connect(transport).then(() => {
-  console.log('Connected to MCP server');
-}).catch((error) => {
-  console.error('Failed to connect to MCP server:', error);
-});
+// Connect with retry logic
+let isClientConnected = false;
+
+// Update connection logic to set flag
+async function connectWithRetry(retries = 5, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await client.connect(transport);
+      console.log('Connected to MCP server');
+      isClientConnected = true;
+      return true;
+    } catch (error: any) {
+      console.warn(`Connection attempt ${i + 1} failed: ${error.message}`);
+      if (i < retries - 1) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  console.error('Failed to connect to MCP server after retries');
+  process.exit(1);
+}
+
+// Initialize connection
+connectWithRetry();
 
 // Handle /api/query requests using the persistent client
-app.post('/api/query', async (req, res) => {
+app.post('/api/query', async (req: any, res: any) => {
   const { query } = req.body;
+  console.log(`Received query: "${query}"`);
+  if (!isClientConnected) {
+    return res.status(503).json({ error: 'MCP server not yet connected, please try again later' });
+  }
   try {
-      const resultRaw = await client.callTool({
-          name: 'query_database',
-          arguments: { query },
-      });
-      const result = QueryToolSchema.parse(resultRaw);
-      if (result.isError) {
-          res.status(400).json({ error: result.content[0].text });
-      } else {
-          const content = JSON.parse(result.content[0].text);
-          res.json(content);
-      }
+    const startTime = Date.now();
+    const resultRaw = await client.callTool({
+      name: 'query_database',
+      arguments: { query },
+    });
+    const duration = Date.now() - startTime;
+    console.log(`Query "${query}" processed in ${duration}ms`);
+    
+    const result = QueryToolSchema.parse(resultRaw);
+    if (result.isError) {
+      console.error(`Query error: ${result.content[0].text}`);
+      res.status(400).json({ error: result.content[0].text });
+    } else {
+      const content = JSON.parse(result.content[0].text);
+      res.json(content);
+    }
   } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    console.error(`Query failed: ${error.message}`);
+    res.status(500).json({ error: error.message });
   }
 });
 
 // Start the Express server on port 3000
 app.listen(3000, () => {
   console.log('Web server running on port 3000');
-});
-
-// Handle process cleanup
-process.on('exit', () => {
-  mcpProcess.kill(); // Ensure the subprocess is terminated when the main process exits
 });
