@@ -31,11 +31,10 @@ async function generateSchemaInfo(): Promise<string> {
         let schemaText = "Database Schema:\n";
         for (const table of tables) {
             const tableName = table.name;
-            schemaText += `\nTable: ${tableName}\n`;
+            schemaText += `${tableName}: `;
             const columns = await db.all(`PRAGMA table_info(${tableName});`, []);
-            for (const column of columns) {
-                schemaText += `  - ${column.name} (${column.type}${column.pk ? ', PRIMARY KEY' : ''}${column.notnull ? ', NOT NULL' : ''})\n`;
-            }
+            const columnNames = columns.map(col => col.name).join(', ');
+            schemaText += `${columnNames}\n`;
         }
         return schemaText;
     } finally {

@@ -74,7 +74,7 @@ async function generateSqlWithGemini(userQuery: string): Promise<string> {
     }
 
     // Generate SQL if not in cache
-    const prompt = `${schemaInfo}\n\nUser query: '${userQuery}'\nBased on the user's query, generate an appropriate SQL query to retrieve the relevant information, and wrap it in a code block like in the examples.\nSQL:`;
+    const prompt = `${schemaInfo}\n\nUser query: '${userQuery}'\nBased on the user's query, generate an appropriate SQL query using the provided schema (tables and column names only). Wrap the SQL query in a code block:\n\`\`\`sql\n<your query here>\n\`\`\``;
     const result = await model.generateContent(prompt);
     const response = result.response;
     const text = response.text();
