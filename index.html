@@ -52,6 +52,7 @@
       const [isDbLoading, setIsDbLoading] = useState(false);
       const [isQueryLoading, setIsQueryLoading] = useState(false);
       const [isDbLoaded, setIsDbLoaded] = useState(false);
+      const [mode, setMode] = useState('search');
 
       useEffect(() => {
         const checkDbLoaded = async () => {
@@ -75,14 +76,15 @@
           alert('Please load the database first');
           return;
         }
-        setMessages(prev => [...prev, { type: 'user', content: input }]);
+        const finalQuery = `${mode}: ${input}`; // Prepend mode prefix
+        setMessages(prev => [...prev, { type: 'user', content: finalQuery }]);
         setInput('');
         setIsQueryLoading(true);
         try {
           const response = await fetchWithRetry('/api/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: input }),
+            body: JSON.stringify({ query: finalQuery }),
           });
           const data = await response.json();
           setMessages(prev => [...prev, { type: 'system', content: data }]);
@@ -116,6 +118,7 @@
       };
 
       const setQuery = (query) => {
+        setMode('search');
         setInput(query);
       };
 
@@ -275,6 +278,17 @@
               </div>
             </div>
             <form className="relative mb-6" onSubmit={handleSubmit}>
+              <div className="mb-2">
+                <label className="text-sm text-gray-600">Select Mode:</label>
+                <select
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value)}
+                  className="ml-2 p-1 border border-gray-300 rounded"
+                >
+                  <option value="search">Search Mode</option>
+                  <option value="modify">Modify Mode</option>
+                </select>
+              </div>
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
