@@ -97,21 +97,23 @@
       };
       
       const loadDatabase = async () => {
-        if (isDbLoaded) {
-          alert('Database is already loaded.');
+        if (!dbFile) {
+          alert('Please select a database file.');
           return;
         }
         setIsDbLoading(true);
         try {
+          const formData = new FormData();
+          formData.append('dbFile', dbFile);
           const response = await fetchWithRetry('/api/load-db', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dbFile }),
+            body: formData,
           });
           const data = await response.json();
           if (data.success) {
             setIsDbLoaded(true);
             alert('Database loaded successfully!');
+            setDbFile(null); // Reset file input after load
           } else {
             alert('Error: ' + data.error);
           }
@@ -139,16 +141,16 @@
           <div className="bg-white rounded-xl shadow-md overflow-hidden p-6 flex-1 flex flex-col mb-4">
             {/* Query Input Section */}
             <input
-              type="text"
-              value={dbFile}
-              onChange={(e) => setDbFile(e.target.value)}
-              placeholder="Enter database file (e.g., farming.db)"
+              type="file"
+              accept=".db,.sqlite"
+              onChange={(e) => setDbFile(e.target.files[0])}
               className="mb-2 p-2 border border-gray-300 rounded w-full"
-              disabled={isDbLoaded || isDbLoading}
+              disabled={isDbLoading} // Only disable during loading
+              key={isDbLoaded ? 'loaded' : 'not-loaded'} // Force re-render to reset
             />
             <button
               onClick={loadDatabase}
-              disabled={isDbLoading || isDbLoaded}
+              disabled={isDbLoading}
               className="relative inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 mb-4"
             >
               {isDbLoading ? (
@@ -159,19 +161,12 @@
                   </svg>
                   <span>Loading...</span>
                 </>
-              ) : isDbLoaded ? (
-                <>
-                  <svg className="-ml-1 mr-2 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span>Database Loaded</span>
-                </>
               ) : (
                 <>
                   <svg className="-ml-1 mr-2 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
-                  <span>Load Database</span>
+                  <span>{isDbLoaded ? 'Reload Database' : 'Load Database'}</span>
                 </>
               )}
             </button>

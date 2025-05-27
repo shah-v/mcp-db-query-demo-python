@@ -27,46 +27,64 @@ const resultCache: Map<string, any[]> = new Map();
 
 // Load schemaInfo from file
 async function loadSchema() {
-  try {
-    schemaInfo = await fs.readFile('schema.txt', 'utf8');
-    logToFile(`Schema content: "${schemaInfo}"`);
-  } catch (error) {
-    console.error('Failed to load schema.txt:', error);
-    throw new Error('Schema file not found or unreadable');
+    try {
+      schemaInfo = await fs.readFile('schema.txt', 'utf8');
+      logToFile(`Schema content: "${schemaInfo}"`);
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        logToFile('Schema file not found - starting without schema');
+        schemaInfo = null; // Initialize as null if file doesn’t exist
+      } else {
+        console.error('Unexpected error loading schema.txt:', error);
+        throw error; // Throw only for unexpected errors (e.g., permissions)
+      }
+    }
   }
-}
 
 // Function to ensure schema is loaded
 async function ensureSchemaLoaded() {
-  if (!schemaInfo) {
-    logToFile('Schema not loaded - throwing error');
-    throw new Error('Schema not loaded');
+    if (!schemaInfo) {
+      logToFile('Schema not loaded - checking for schema.txt');
+      try {
+        schemaInfo = await fs.readFile('schema.txt', 'utf8');
+        logToFile(`Schema loaded: "${schemaInfo}"`);
+      } catch (error: any) {
+        if (error.code === 'ENOENT') {
+          throw new Error('No database uploaded yet - please upload a database first');
+        }
+        throw error; // Re-throw unexpected errors
+      }
+    }
   }
-}
 
 // Global database connection
 let db: {
-  all: (sql: string, params: any[]) => Promise<any[]>;
-  close: () => Promise<void>;
-} | null = null;
-
-// Function to initialize the database connection
-async function initDb() {
-    try {
-      const dbFile = await fs.readFile('db-config.txt', 'utf8');
-      const trimmedDbFile = dbFile.trim();
-      logToFile(`Using database file: "${trimmedDbFile}"`);
-      const sqliteDb = new sqlite3.Database(trimmedDbFile);
-      db = {
-        all: promisify(sqliteDb.all.bind(sqliteDb)) as (sql: string, params: any[]) => Promise<any[]>,
-        close: promisify(sqliteDb.close.bind(sqliteDb)) as () => Promise<void>,
-      };
-      logToFile('Database connection opened');
-    } catch (error) {
-      logToFile(`Failed to read db-config.txt or open database: ${error}`);
-      throw new Error('Failed to initialize database');
-    }
-}
+    all: (sql: string, params: any[]) => Promise<any[]>;
+    close: () => Promise<void>;
+  } | null = null;
+  
+  // Function to reload the database connection
+  async function reloadDb() {
+      try {
+        if (db) {
+          await db.close();
+          logToFile('Existing database connection closed');
+          db = null; // Ensure reference is cleared
+        }
+        const dbFile = await fs.readFile('db-config.txt', 'utf8');
+        const trimmedDbFile = dbFile.trim();
+        logToFile(`Using database file: "${trimmedDbFile}"`);
+        const sqliteDb = new sqlite3.Database(trimmedDbFile);
+        db = {
+          all: promisify(sqliteDb.all.bind(sqliteDb)) as (sql: string, params: any[]) => Promise<any[]>,
+          close: promisify(sqliteDb.close.bind(sqliteDb)) as () => Promise<void>,
+        };
+        logToFile('Database connection reopened');
+      } catch (error) {
+        logToFile(`Failed to reload database: ${error}`);
+        throw new Error('Failed to reload database');
+      }
+  }
 
 // Initialize MCP Server
 const server = new McpServer({
@@ -168,26 +186,16 @@ server.tool(
   async (args, extra) => {
     await ensureSchemaLoaded();
 
-    // Initialize database if not already done
-    if (!db) {
-        try {
-        const dbFile = await fs.readFile('db-config.txt', 'utf8');
-        const trimmedDbFile = dbFile.trim();
-        logToFile(`Using database file: "${trimmedDbFile}"`);
-        const sqliteDb = new sqlite3.Database(trimmedDbFile);
-        db = {
-            all: promisify(sqliteDb.all.bind(sqliteDb)) as (sql: string, params: any[]) => Promise<any[]>,
-            close: promisify(sqliteDb.close.bind(sqliteDb)) as () => Promise<void>,
-        };
-        logToFile('Database connection opened');
-        } catch (error) {
-        logToFile(`Failed to read db-config.txt or open database: ${error}`);
+    // Reload database connection to use the latest db-config.txt
+    try {
+        await reloadDb();
+      } catch (error: any) {
+        logToFile(`Failed to reload database in query_database: ${error.message}`);
         return {
-            content: [{ type: "text", text: `Error: Database not initialized. Please load a database first.` }],
-            isError: true,
+          content: [{ type: "text", text: `Error: ${error.message}` }],
+          isError: true,
         };
-        }
-    }
+      }
 
     let originalQuery = args.query;
     let userQuery = originalQuery.trim();
@@ -225,25 +233,19 @@ server.tool(
 // Start the MCP server after loading schema and initializing DB
 (async () => {
   try {
-    await loadSchema(); // Load schema first
+    await loadSchema(); // Attempt to load schema, but proceed if not found
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.log('MCP server running with StdioServerTransport');
   } catch (error) {
     console.error('Failed to start MCP server:', error);
-    process.exit(1); // Exit if schema loading or DB init fails
+    process.exit(1); // Exit only for critical errors
   }
 })();
 
-// Function to close the database connection
-async function closeDb() {
-  if (db) {
-    await db.close();
-    console.log('Database connection closed');
-  }
-}
-
 // Handle process cleanup
 process.on('exit', () => {
-    closeDb().catch(error => logToFile(`Error closing DB: ${error}`));
+    if (db) {
+      db.close().catch(error => logToFile(`Error closing DB: ${error}`));
+    }
   });

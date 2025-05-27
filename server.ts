@@ -4,6 +4,9 @@ import sqlite3 from "sqlite3";
 import { promisify } from "util";
 import fs from 'fs/promises';
 import * as dotenv from 'dotenv';
+import multer from 'multer';
+import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
 dotenv.config();
 
 // Initialize Express app
@@ -42,17 +45,22 @@ async function generateSchemaInfo(dbFile: string): Promise<string> {
     }
 }
 
+// Configure multer for file uploads
+const upload = multer({ dest: 'uploads/' });
+
 // Define /api/load-db endpoint
-app.post('/api/load-db', async (req, res) => {
+app.post('/api/load-db', upload.single('dbFile'), async (req, res) => {
     try {
-        const { dbFile } = req.body;
-        if (!dbFile) {
-            res.status(400).json({ success: false, error: 'dbFile is required' });
+        const file = req.file;
+        if (!file) {
+            res.status(400).json({ success: false, error: 'No file uploaded' });
             return;
         }
-        schemaInfo = await generateSchemaInfo(dbFile);
-        await fs.writeFile('schema.txt', schemaInfo); // Save schema
-        await fs.writeFile('db-config.txt', dbFile); // Save db file name
+        const dbFilePath = path.join(__dirname, 'uploads', `${uuidv4()}-${file.originalname}`);
+        await fs.rename(file.path, dbFilePath);
+        schemaInfo = await generateSchemaInfo(dbFilePath);
+        await fs.writeFile('schema.txt', schemaInfo);
+        await fs.writeFile('db-config.txt', dbFilePath);
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
