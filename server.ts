@@ -56,11 +56,12 @@ app.post('/api/load-db', upload.single('dbFile'), async (req, res) => {
             res.status(400).json({ success: false, error: 'No file uploaded' });
             return;
         }
-        const dbFilePath = path.join(__dirname, 'uploads', `${uuidv4()}-${file.originalname}`);
+        const dbFilePath = path.join(__dirname, 'uploads', 'current.db');
         await fs.rename(file.path, dbFilePath);
         schemaInfo = await generateSchemaInfo(dbFilePath);
         await fs.writeFile('schema.txt', schemaInfo);
-        await fs.writeFile('db-config.txt', dbFilePath);
+        const config: { path: string; name: string } = { path: dbFilePath, name: file.originalname };
+        await fs.writeFile('db-config.txt', JSON.stringify(config));
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
@@ -70,9 +71,9 @@ app.post('/api/load-db', upload.single('dbFile'), async (req, res) => {
 app.get('/api/is-db-loaded', async (req, res) => {
     try {
         await fs.access('schema.txt');
-        const dbFilePath = await fs.readFile('db-config.txt', 'utf8');
-        const dbName = path.basename(dbFilePath.trim());
-        res.json({ loaded: true, dbName });
+        const configData = await fs.readFile('db-config.txt', 'utf8');
+        const config: { path: string; name: string } = JSON.parse(configData);
+        res.json({ loaded: true, dbName: config.name });
     } catch (error) {
         res.json({ loaded: false });
     }

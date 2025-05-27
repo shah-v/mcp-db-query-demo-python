@@ -71,8 +71,9 @@ let db: {
                 logToFile('Existing database connection closed');
                 db = null; // Ensure reference is cleared
             }
-            const dbFile = await fs.readFile('db-config.txt', 'utf8');
-            const trimmedDbFile = dbFile.trim();
+            const configData = await fs.readFile('db-config.txt', 'utf8');
+            const config: { path: string; name: string } = JSON.parse(configData);
+            const trimmedDbFile = config.path.trim();
             logToFile(`Using database file: "${trimmedDbFile}"`);
             const sqliteDb = new sqlite3.Database(trimmedDbFile);
             db = {
