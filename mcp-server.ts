@@ -52,11 +52,20 @@ let db: {
 
 // Function to initialize the database connection
 async function initDb() {
-  const sqliteDb = new sqlite3.Database("farming.db");
-  db = {
-    all: promisify(sqliteDb.all.bind(sqliteDb)) as (sql: string, params: any[]) => Promise<any[]>,
-    close: promisify(sqliteDb.close.bind(sqliteDb)) as () => Promise<void>,
-  };
+    try {
+      const dbFile = await fs.readFile('db-config.txt', 'utf8');
+      const trimmedDbFile = dbFile.trim();
+      logToFile(`Using database file: "${trimmedDbFile}"`);
+      const sqliteDb = new sqlite3.Database(trimmedDbFile);
+      db = {
+        all: promisify(sqliteDb.all.bind(sqliteDb)) as (sql: string, params: any[]) => Promise<any[]>,
+        close: promisify(sqliteDb.close.bind(sqliteDb)) as () => Promise<void>,
+      };
+      logToFile('Database connection opened');
+    } catch (error) {
+      logToFile(`Failed to read db-config.txt or open database: ${error}`);
+      throw new Error('Failed to initialize database');
+    }
 }
 
 // Initialize MCP Server
@@ -158,6 +167,28 @@ server.tool(
   { query: z.string() },
   async (args, extra) => {
     await ensureSchemaLoaded();
+
+    // Initialize database if not already done
+    if (!db) {
+        try {
+        const dbFile = await fs.readFile('db-config.txt', 'utf8');
+        const trimmedDbFile = dbFile.trim();
+        logToFile(`Using database file: "${trimmedDbFile}"`);
+        const sqliteDb = new sqlite3.Database(trimmedDbFile);
+        db = {
+            all: promisify(sqliteDb.all.bind(sqliteDb)) as (sql: string, params: any[]) => Promise<any[]>,
+            close: promisify(sqliteDb.close.bind(sqliteDb)) as () => Promise<void>,
+        };
+        logToFile('Database connection opened');
+        } catch (error) {
+        logToFile(`Failed to read db-config.txt or open database: ${error}`);
+        return {
+            content: [{ type: "text", text: `Error: Database not initialized. Please load a database first.` }],
+            isError: true,
+        };
+        }
+    }
+
     let originalQuery = args.query;
     let userQuery = originalQuery.trim();
 
@@ -195,7 +226,6 @@ server.tool(
 (async () => {
   try {
     await loadSchema(); // Load schema first
-    await initDb();     // Initialize the database connection
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.log('MCP server running with StdioServerTransport');

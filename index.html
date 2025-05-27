@@ -53,6 +53,7 @@
       const [isQueryLoading, setIsQueryLoading] = useState(false);
       const [isDbLoaded, setIsDbLoaded] = useState(false);
       const [mode, setMode] = useState('search');
+      const [dbFile, setDbFile] = useState('farming.db');
 
       useEffect(() => {
         const checkDbLoaded = async () => {
@@ -102,7 +103,11 @@
         }
         setIsDbLoading(true);
         try {
-          const response = await fetchWithRetry('/api/load-db', { method: 'POST' });
+          const response = await fetchWithRetry('/api/load-db', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dbFile }),
+          });
           const data = await response.json();
           if (data.success) {
             setIsDbLoaded(true);
@@ -133,6 +138,14 @@
           {/* Main Content */}
           <div className="bg-white rounded-xl shadow-md overflow-hidden p-6 flex-1 flex flex-col mb-4">
             {/* Query Input Section */}
+            <input
+              type="text"
+              value={dbFile}
+              onChange={(e) => setDbFile(e.target.value)}
+              placeholder="Enter database file (e.g., farming.db)"
+              className="mb-2 p-2 border border-gray-300 rounded w-full"
+              disabled={isDbLoaded || isDbLoading}
+            />
             <button
               onClick={loadDatabase}
               disabled={isDbLoading || isDbLoaded}

@@ -15,8 +15,8 @@ app.use(cors({ origin: 'http://localhost:3000' })); // Allow requests from front
 let schemaInfo: string | null = null;
 
 // Database connection helper
-const getDb = () => {
-    const db = new sqlite3.Database("farming.db");
+const getDb = (dbFile: string) => {
+    const db = new sqlite3.Database(dbFile);
     return {
         all: promisify(db.all.bind(db)) as (sql: string, params: any[]) => Promise<any[]>,
         close: promisify(db.close.bind(db)) as () => Promise<void>,
@@ -24,8 +24,8 @@ const getDb = () => {
 };
 
 // Function to generate schema from SQLite database
-async function generateSchemaInfo(): Promise<string> {
-    const db = getDb();
+async function generateSchemaInfo(dbFile: string): Promise<string> {
+    const db = getDb(dbFile);
     try {
         const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';", []);
         let schemaText = "Database Schema:\n";
@@ -44,10 +44,15 @@ async function generateSchemaInfo(): Promise<string> {
 
 // Define /api/load-db endpoint
 app.post('/api/load-db', async (req, res) => {
-    console.log('SERVER: /api/load-db hit');
     try {
-        schemaInfo = await generateSchemaInfo();
-        await fs.writeFile('schema.txt', schemaInfo); // Save to file
+        const { dbFile } = req.body;
+        if (!dbFile) {
+            res.status(400).json({ success: false, error: 'dbFile is required' });
+            return;
+        }
+        schemaInfo = await generateSchemaInfo(dbFile);
+        await fs.writeFile('schema.txt', schemaInfo); // Save schema
+        await fs.writeFile('db-config.txt', dbFile); // Save db file name
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
@@ -55,7 +60,6 @@ app.post('/api/load-db', async (req, res) => {
 });
 
 app.get('/api/is-db-loaded', async (req, res) => {
-    console.log('SERVER: /api/is-db-loaded hit');
     try {
         await fs.access('schema.txt');
         res.json({ loaded: true });
