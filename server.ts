@@ -70,7 +70,9 @@ app.post('/api/load-db', upload.single('dbFile'), async (req, res) => {
 app.get('/api/is-db-loaded', async (req, res) => {
     try {
         await fs.access('schema.txt');
-        res.json({ loaded: true });
+        const dbFilePath = await fs.readFile('db-config.txt', 'utf8');
+        const dbName = path.basename(dbFilePath.trim());
+        res.json({ loaded: true, dbName });
     } catch (error) {
         res.json({ loaded: false });
     }

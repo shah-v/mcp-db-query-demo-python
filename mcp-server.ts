@@ -65,26 +65,35 @@ let db: {
   
   // Function to reload the database connection
   async function reloadDb() {
-      try {
-        if (db) {
-          await db.close();
-          logToFile('Existing database connection closed');
-          db = null; // Ensure reference is cleared
+    try {
+            if (db) {
+                await db.close();
+                logToFile('Existing database connection closed');
+                db = null; // Ensure reference is cleared
+            }
+            const dbFile = await fs.readFile('db-config.txt', 'utf8');
+            const trimmedDbFile = dbFile.trim();
+            logToFile(`Using database file: "${trimmedDbFile}"`);
+            const sqliteDb = new sqlite3.Database(trimmedDbFile);
+            db = {
+                all: promisify(sqliteDb.all.bind(sqliteDb)) as (sql: string, params: any[]) => Promise<any[]>,
+                close: promisify(sqliteDb.close.bind(sqliteDb)) as () => Promise<void>,
+            };
+            logToFile('Database connection reopened');
+            
+            // Reload schema to match the new database
+            schemaInfo = await fs.readFile('schema.txt', 'utf8');
+            logToFile(`Schema reloaded: "${schemaInfo}"`);
+            
+            // Clear caches for the new database
+            sqlCache.clear();
+            resultCache.clear();
+            logToFile('SQL and result caches cleared');
+        } catch (error) {
+            logToFile(`Failed to reload database or schema: ${error}`);
+            throw new Error('Failed to reload database or schema');
         }
-        const dbFile = await fs.readFile('db-config.txt', 'utf8');
-        const trimmedDbFile = dbFile.trim();
-        logToFile(`Using database file: "${trimmedDbFile}"`);
-        const sqliteDb = new sqlite3.Database(trimmedDbFile);
-        db = {
-          all: promisify(sqliteDb.all.bind(sqliteDb)) as (sql: string, params: any[]) => Promise<any[]>,
-          close: promisify(sqliteDb.close.bind(sqliteDb)) as () => Promise<void>,
-        };
-        logToFile('Database connection reopened');
-      } catch (error) {
-        logToFile(`Failed to reload database: ${error}`);
-        throw new Error('Failed to reload database');
-      }
-  }
+    }
 
 // Initialize MCP Server
 const server = new McpServer({
@@ -123,9 +132,9 @@ async function generateSqlWithGemini(mode: string, userQuery: string): Promise<s
   // Generate mode-specific prompt
   let prompt;
   if (mode === 'search') {
-    prompt = `${schemaInfo}\n\nUser query: '${actualQuery}'\nYou are in SEARCH MODE. Generate a SELECT SQL query to retrieve the relevant information based on the user's query. Do not generate any queries that modify the database (e.g., INSERT, UPDATE, DELETE, CREATE, ALTER). Wrap the SQL query in a code block:\n\`\`\`sql\n<your query here>\n\`\`\``;
+    prompt = `${schemaInfo}\n\nUser query: '${actualQuery}'\nYou are in SEARCH MODE. Generate a SELECT SQL query to retrieve the relevant information based on the user's query. Ensure the query starts with SELECT and retrieves data without modifying the database (e.g., no INSERT, UPDATE, DELETE, CREATE, ALTER). Wrap the SQL query in a code block:\n\`\`\`sql\n<your query here>\n\`\`\``;
     logToFile(`Generated SEARCH MODE prompt: "${prompt}"`);
-} else {
+  } else {
     prompt = `${schemaInfo}\n\nUser query: '${actualQuery}'\nYou are in MODIFY MODE. Generate an appropriate SQL query based on the user's query, which may include INSERT, UPDATE, DELETE, CREATE, ALTER, etc. Wrap the SQL query in a code block:\n\`\`\`sql\n<your query here>\n\`\`\``;
     logToFile(`Generated MODIFY MODE prompt: "${prompt}"`);
   }

@@ -53,7 +53,8 @@
       const [isQueryLoading, setIsQueryLoading] = useState(false);
       const [isDbLoaded, setIsDbLoaded] = useState(false);
       const [mode, setMode] = useState('search');
-      const [dbFile, setDbFile] = useState('farming.db');
+      const [dbFile, setDbFile] = useState(null);
+      const [currentDb, setCurrentDb] = useState(null);
 
       useEffect(() => {
         const checkDbLoaded = async () => {
@@ -62,6 +63,7 @@
             const data = await response.json();
             if (data.loaded) {
               setIsDbLoaded(true);
+              setCurrentDb(data.dbName || 'Unknown');
             }
           } catch (error) {
             console.error('Error checking database load status after retries:', error);
@@ -88,14 +90,18 @@
             body: JSON.stringify({ query: finalQuery }),
           });
           const data = await response.json();
-          setMessages(prev => [...prev, { type: 'system', content: data }]);
+          if (response.ok) {
+            setMessages(prev => [...prev, { type: 'system', content: data }]);
+          } else {
+            setMessages(prev => [...prev, { type: 'system', content: { error: data.error || 'Unknown error' } }]);
+          }
         } catch (error) {
-          setMessages(prev => [...prev, { type: 'system', content: 'Error: ' + error.message }]);
+          setMessages(prev => [...prev, { type: 'system', content: { error: error.message } }]);
         } finally {
           setIsQueryLoading(false);
         }
       };
-      
+
       const loadDatabase = async () => {
         if (!dbFile) {
           alert('Please select a database file.');
@@ -112,6 +118,7 @@
           const data = await response.json();
           if (data.success) {
             setIsDbLoaded(true);
+            setCurrentDb(dbFile.name); // Set the current database name
             alert('Database loaded successfully!');
             setDbFile(null); // Reset file input after load
           } else {
@@ -139,14 +146,17 @@
 
           {/* Main Content */}
           <div className="bg-white rounded-xl shadow-md overflow-hidden p-6 flex-1 flex flex-col mb-4">
+            {isDbLoaded && (
+              <p className="text-gray-600">Current Database: {currentDb}</p>
+            )}
             {/* Query Input Section */}
             <input
               type="file"
               accept=".db,.sqlite"
               onChange={(e) => setDbFile(e.target.files[0])}
               className="mb-2 p-2 border border-gray-300 rounded w-full"
-              disabled={isDbLoading} // Only disable during loading
-              key={isDbLoaded ? 'loaded' : 'not-loaded'} // Force re-render to reset
+              disabled={isDbLoading}
+              key={isDbLoaded ? 'loaded' : 'not-loaded'}
             />
             <button
               onClick={loadDatabase}
@@ -179,9 +189,9 @@
                     </div>
                   ) : (
                     <div>
-                      {typeof msg.content === 'string' ? (
+                      {msg.content.error ? (
                         <div className="p-4 text-red-600">
-                          <p>{msg.content}</p>
+                          <p>{msg.content.error}</p>
                         </div>
                       ) : (
                         <div>
@@ -229,7 +239,7 @@
                           </div>
                           <h3 className="text-lg font-medium text-gray-700 mb-2">Explanation</h3>
                           <div className="bg-gray-50 p-4 rounded-lg">
-                            <p className="text-gray-800">{msg.content.explanation}</p>
+                            <p className="text-gray-800">{msg.content.explanation || 'No explanation provided'}</p>
                           </div>
                         </div>
                       )}
