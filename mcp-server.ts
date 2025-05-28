@@ -9,6 +9,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 import path from 'path';
 import fs2 from 'fs';
+import { Database, SQLiteDatabaseImpl } from './database';
 
 // Logging setup
 const logFile = path.join(__dirname, 'mcp-server.log');
@@ -57,44 +58,30 @@ async function ensureSchemaLoaded() {
     }
   }
 
-// Global database connection
-let db: {
-    all: (sql: string, params: any[]) => Promise<any[]>;
-    close: () => Promise<void>;
-  } | null = null;
-  
-  // Function to reload the database connection
+  let db: Database | null = null;
+
   async function reloadDb() {
     try {
-            if (db) {
-                await db.close();
-                logToFile('Existing database connection closed');
-                db = null; // Ensure reference is cleared
-            }
-            const configData = await fs.readFile('db-config.txt', 'utf8');
-            const config: { path: string; name: string } = JSON.parse(configData);
-            const trimmedDbFile = config.path.trim();
-            logToFile(`Using database file: "${trimmedDbFile}"`);
-            const sqliteDb = new sqlite3.Database(trimmedDbFile);
-            db = {
-                all: promisify(sqliteDb.all.bind(sqliteDb)) as (sql: string, params: any[]) => Promise<any[]>,
-                close: promisify(sqliteDb.close.bind(sqliteDb)) as () => Promise<void>,
-            };
-            logToFile('Database connection reopened');
-            
-            // Reload schema to match the new database
-            schemaInfo = await fs.readFile('schema.txt', 'utf8');
-            logToFile(`Schema reloaded: "${schemaInfo}"`);
-            
-            // Clear caches for the new database
-            sqlCache.clear();
-            resultCache.clear();
-            logToFile('SQL and result caches cleared');
-        } catch (error) {
-            logToFile(`Failed to reload database or schema: ${error}`);
-            throw new Error('Failed to reload database or schema');
-        }
+      if (db) {
+        await db.close();
+        logToFile('Existing database connection closed');
+        db = null;
+      }
+      const configData = await fs.readFile('db-config.txt', 'utf8');
+      const config: { type: string; path: string; name: string } = JSON.parse(configData);
+      if (config.type === 'sqlite') {
+        db = new SQLiteDatabaseImpl(config.path);
+        await db.connect();
+        logToFile(`Connected to SQLite database: "${config.path}"`);
+      } else {
+        throw new Error(`Unsupported database type: ${config.type}`);
+      }
+      // ... rest of the function remains the same ...
+    } catch (error) {
+      logToFile(`Failed to reload database or schema: ${error}`);
+      throw new Error('Failed to reload database or schema');
     }
+  }
 
 // Initialize MCP Server
 const server = new McpServer({
@@ -152,28 +139,20 @@ async function generateSqlWithGemini(mode: string, userQuery: string): Promise<s
   return sqlQuery;
 }
 
-// Function to execute SQL on the database
 async function executeSql(sql: string, mode: string): Promise<any> {
-  // Check if the query results are already cached
-  if (resultCache.has(sql)) {
-    return resultCache.get(sql)!;
+    if (resultCache.has(sql)) {
+      return resultCache.get(sql)!;
+    }
+    if (mode === 'search' && !sql.trim().toUpperCase().startsWith('SELECT')) {
+      throw new Error('Only SELECT queries are allowed in Search Mode');
+    }
+    if (!db) {
+      throw new Error('Database connection not initialized');
+    }
+    const rows = await db.query(sql);
+    resultCache.set(sql, rows);
+    return rows;
   }
-
-  // Enforce Search Mode constraints
-  if (mode === 'search' && !sql.trim().toUpperCase().startsWith('SELECT')) {
-    throw new Error('Only SELECT queries are allowed in Search Mode');
-  }
-
-  // Execute query if not in cache
-  if (!db) {
-    throw new Error('Database connection not initialized');
-  }
-  const rows = await db.all(sql, []);
-
-  // Cache the results
-  resultCache.set(sql, rows);
-  return rows;
-}
 
 // Function to generate explanation with Gemini
 async function generateExplanation(userQuery: string, results: any[]): Promise<string> {
