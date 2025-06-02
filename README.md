@@ -1,178 +1,141 @@
-Farming Database Query System
-=============================
+MCP Demo
+================
 
-Welcome to the **Farming Database Query System**! This project demonstrates an innovative way to query a farming database using everyday language. By combining the **Model Context Protocol (MCP)** and the **Gemini API**, it translates natural language questions into SQL commands, allowing users to get answers about farms, crops, and harvests without needing technical expertise.
+Welcome to the **MCP Demo**! This project is a powerful demonstration of how natural language processing and database integration can simplify access to data. By leveraging the **Model Context Protocol (MCP)** and the **Gemini API**, it allows users to query data using plain English through a web interface or command-line tools. The system supports multiple database backends---SQLite, MSSQL, and MongoDB---making it versatile for various use cases.
 
-What's This Project About?
---------------------------
+Purpose
+-------
 
-Imagine you're a farmer, a researcher, or just someone curious about agricultural data. Normally, you'd need to know SQL or have a tech expert help you dig into a database. This project changes that! It's a demo of how artificial intelligence can make complex data accessible to everyone. Using AI, we've built a system where you can ask simple questions like "how many farms are there?" or "what crops grow at Green Acres?" and get clear, accurate answers pulled straight from a database.
+The **MCP Demo** aims to:
 
-### What Are We Trying to Achieve?
+-   Provide a **user-friendly interface** for querying farming data without requiring SQL or database expertise.
+-   Showcase the integration of AI-driven query generation (via Gemini API) with a flexible database abstraction layer.
+-   Demonstrate how MCP can bridge client-server communication to process natural language queries.
+-   Serve as a template for building scalable, multi-database applications with real-world applications in agriculture.
 
-Our goal is to create a **user-friendly interface** that:
+This project is ideal for developers, researchers, or anyone interested in exploring how AI can make complex data accessible.
 
--   Lets anyone ask questions about farming data in plain English.
--   Uses AI to understand those questions and fetch the right answers from a database.
--   Shows how powerful tools like MCP and the Gemini API can simplify data access.
--   Bridges the gap between technical systems and everyday users, making farming data more approachable.
+Features
+--------
 
-In short, we're proving that you don't need to be a database wizard to explore agricultural insights---just type your question, and let the AI do the heavy lifting!
+-   **Multi-Database Support**: Works with SQLite, MSSQL, and MongoDB, allowing flexibility in data storage.
+-   **Natural Language Queries**: Ask questions like "How many farms are there?" or "List crops in Green Acres" and get results from the database.
+-   **Web Interface**: A sleek, interactive frontend built with React and Tailwind CSS for easy database uploads and querying.
+-   **CLI Tools**: Command-line options for testing and interactive querying.
+-   **AI-Powered**: Uses the Gemini API to translate plain English into database queries (SQL or MongoDB operations).
+-   **Caching**: Optimizes performance with query and result caching.
+-   **Extensible Design**: Database abstraction layer and registry make it easy to add new database types.
 
 Requirements
 ------------
 
-Before you can run the project, make sure you have the following:
+To run this project, you'll need:
 
--   **Node.js**: Version 18 or higher (download- **SQLite**: For managing the farming database.
--   A **Gemini API Key**: You'll need this to power the AI query system. Sign up at [Google AI Studio](https://aistudio.google.com/) to get one.
--   A terminal or command-line tool to run the scripts.
+-   **Node.js**: Version 18 or higher ([download here](https://nodejs.org/)).
+-   **Databases**: At least one of the following:
+    -   SQLite (no additional setup for local files).
+    -   MSSQL (requires a running server instance).
+    -   MongoDB (requires a running server, e.g., locally at mongodb://localhost:27017).
+-   **Gemini API Key**: Obtain one from [Google AI Studio](https://aistudio.google.com/) for AI query generation.
+-   A terminal or command-line interface.
 
-How to Set It Up and Run It: Step-by-Step
------------------------------------------
+Installation
+------------
 
-Follow these steps to get the project up and running on your machine. Don't worry---we'll walk you through every detail!
+Follow these steps to set up the project locally:
 
-### Step 1: Get the Project Files
+1.  **Clone the Repository**
 
-1.  Open your terminal.
-2.  Download the project by cloning the repository:
+    `git clone https://github.com/yourusername/mcp-farming-demo.git cd mcp-farming-demo`
 
-    ```
-    git clone https://github.com/yourusername/mcp-farming-demo.git
+2.  **Install Dependencies**
 
-    ```
+    `npm install`
 
-3.  Move into the project folder:
+    This installs all required packages, including Express, MongoDB, MSSQL, SQLite3, and the MCP SDK.
+3.  **Configure Environment Variables**
+    -   Create a .env file in the project root:
 
-    ```
-    cd mcp-farming-demo
+        `GEMINI_API_KEY=your-actual-key-here`
 
-    ```
+    -   Replace your-actual-key-here with your Gemini API key from Google AI Studio.
+    -   Ensure .env is listed in .gitignore to keep your key secure.
+4.  **Prepare a Database (Optional)**
+    -   **SQLite**: Use the provided setup/setup-db.ts script to create a sample farming.db:
 
-### Step 2: Install Dependencies
+        `npx ts-node setup/setup-db.ts`
 
-1.  Run this command to install all the necessary packages:
+    -   **MSSQL**: Run setup/setup-db-mssql.ts after updating the config with your server details.
+    -   **MongoDB**: Run setup/setup-db-mongodb.ts to populate a local MongoDB instance.
+    -   Alternatively, use your own database and upload it via the web interface.
 
-    ```
-    npm install
+Usage
+-----
 
-    ```
+### Option 1: Web Interface
 
-    This sets up everything the project needs to work, like the tools to talk to the Gemini API and handle the database.
+1.  **Start the Servers**
+    -   In one terminal, start the API server:
 
-### Step 3: Set Up the Database
+        `npx ts-node server/server.ts`
 
-1.  Create a SQLite database called `farming.db`.
-2.  Add these tables to it:
-    -   **`farms`**: Columns: `id` (integer), `name` (text), `location` (text)
-    -   **`crops`**: Columns: `id` (integer), `farm_id` (integer), `type` (text), `planting_date` (text)
-    -   **`harvests`**: Columns: `id` (integer), `crop_id` (integer), `harvest_date` (text), `quantity` (real)
-3.  Add some sample data to play with. Here's an example you can run in your SQLite tool:
+    -   In another terminal, start the web server:
 
-    ```
-    INSERT INTO farms (name, location) VALUES ('Green Acres', 'California'), ('Sunny Fields', 'Texas');
-    INSERT INTO crops (farm_id, type, planting_date) VALUES (1, 'wheat', '2025-03-01'), (2, 'corn', '2025-04-01');
-    INSERT INTO harvests (crop_id, harvest_date, quantity) VALUES (1, '2025-07-01', 10.5), (2, '2025-08-15', 15.0);
+        `npx ts-node server/app.ts`
 
-    ```
+2.  **Access the Interface**
+    -   Open your browser to http://localhost:3000.
+    -   Select a database type (SQLite, MSSQL, or MongoDB).
+    -   For SQLite, upload a .db or .sqlite file; for MSSQL/MongoDB, enter connection details.
+    -   Click "Load Database" to initialize the system.
+3.  **Query the Database**
+    -   Choose a mode: "Search Mode" (read-only) or "Modify Mode" (future write support).
+    -   Type a question (e.g., "How many farms are there?") and click "Ask".
+    -   View the generated query, results, and explanation in the interface.
 
-### Step 4: Add Your Gemini API Key
+### Option 2: Command-Line Interface (CLI)
 
-1.  Create a file named `.env` in the root directory of the project (the same folder where `server.ts` and `package.json` are located).
-2.  Add the following line to the `.env` file:
+1.  **Start the MCP Server**
 
-    ```
-    GEMINI_API_KEY="your-actual-key-here"
-    ``` 
-    Replace `your-actual-key-here` with the actual API key you got from Google AI Studio.
-3. Save the `.env` file.
+    `npx ts-node server/mcp-server.ts`
 
-**Important:** Make sure the `.env` file is not committed to version control (e.g., Git) by adding it to your `.gitignore` file.
+2.  **Run the CLI**
 
-### Step 5: Run the Project
+    `npx ts-node client/cli.ts`
 
-Now you're ready to see it in action!
+    -   Enter queries like "list all farms" or type "exit" to quit.
+    -   Requires a pre-loaded database via the web interface or manual setup.
 
-#### Option 1: Start the Server and Test with Predefined Queries
+### Option 3: Test Client
 
-1.  In one terminal, start the MCP server:
+1.  **Start the MCP Server**
 
-    ```
-    npx ts-node server.ts
+    `npx ts-node server/mcp-server.ts`
 
-    ```
+2.  **Run Test Queries**
 
-    This powers up the system and gets it ready to handle queries.
-2.  In a second terminal, run the client script to see some example questions in action:
+    `npx ts-node client/client.ts`
 
-    ```
-    npx ts-node client.ts
+    -   Executes predefined test queries (e.g., "crops in Green Acres").
 
-    ```
+### Example Queries
 
-#### Option 2: Use the Interactive CLI
+-   **Search Mode**:
+    -   "How many farms are there?"
+    -   "List all crops in Green Acres"
+    -   "Which farms grow wheat?"
+-   **Output**: Results include the generated query (SQL/MongoDB), data rows, and a natural language explanation.
 
-1.  Start the server (same as above):
+Project Structure
+-----------------
 
-    ```
-    npx ts-node server.ts
+-   **database/**: Database abstraction layer and implementations (MongoDB, MSSQL, SQLite).
+-   **server/**: Backend servers (app.ts for web, mcp-server.ts for MCP, server.ts for API).
+-   **client/**: CLI (cli.ts) and test client (client.ts).
+-   **static/**: Web frontend (index.html with React).
+-   **setup/**: Scripts to create sample databases.
 
-    ```
+License
+-------
 
-2.  In another terminal, launch the interactive command-line interface:
-
-    ```
-    npx ts-node cli.ts
-
-    ```
-
-3.  Type your own questions---like "list all farms" or "crops in Sunny Fields"---and watch it respond!
-
-Example Questions to Try
-------------------------
-
-Here's a taste of what you can ask:
-
--   "how many farms"
--   "list all farms"
--   "crops in Green Acres"
--   "tell me about Sunny Fields"
--   "which farms grow wheat"
-
-### What You'll See
-
--   For "how many farms":
-
-    ```
-    [{"NumberOfFarms":2}]
-
-    ```
-
--   For "crops in Green Acres":
-
-    ```
-    [{"id":1,"farm_id":1,"type":"wheat","planting_date":"2025-03-01"}]
-
-    ```
-
--   For something unrelated like "what's the weather?":
-
-    ```
-    I can only answer questions about farms, crops, and harvests.
-
-    ```
-
-Extra Notes
------------
-
--   **API Key**: Make sure your Gemini API key is valid and has enough usage quota. If it's rate-limited, you might see delays or errors.
--   **Error Handling**: If something goes wrong (like a badly worded question), the system will let you know and suggest trying again.
--   **What It Can't Do**: It's focused on farm-related data only---so no weather forecasts or unrelated topics!
-
-Why This Matters
-----------------
-
-This project is a proof-of-concept for how AI can transform the way we interact with data. Whether you're a developer, a farmer, or just a curious mind, it's a fun and practical way to explore the future of technology in agriculture.
-
-Happy querying!
+This project is licensed under the MIT License.
