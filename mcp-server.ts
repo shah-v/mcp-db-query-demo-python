@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import './database-registry';
 import sqlite3 from "sqlite3";
 import { promisify } from "util";
 import { z } from "zod";
