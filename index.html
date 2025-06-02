@@ -55,6 +55,15 @@
       const [mode, setMode] = useState('search');
       const [dbFile, setDbFile] = useState(null);
       const [currentDb, setCurrentDb] = useState(null);
+      const [dbType, setDbType] = useState('sqlite');
+      const [connectionDetails, setConnectionDetails] = useState({});
+
+      // Handle database type change
+      const handleDbTypeChange = (e) => {
+        setDbType(e.target.value);
+        setConnectionDetails({});
+        setDbFile(null); // Reset file for SQLite
+      };
 
       useEffect(() => {
         const checkDbLoaded = async () => {
@@ -103,24 +112,36 @@
       };
 
       const loadDatabase = async () => {
-        if (!dbFile) {
-          alert('Please select a database file.');
-          return;
-        }
         setIsDbLoading(true);
         try {
-          const formData = new FormData();
-          formData.append('dbFile', dbFile);
+          let body;
+          if (dbType === 'sqlite') {
+            if (!dbFile) {
+              alert('Please select a database file.');
+              return;
+            }
+            body = new FormData();
+            body.append('dbFile', dbFile);
+            body.append('type', 'sqlite');
+          } else {
+            if (!Object.keys(connectionDetails).length) {
+              alert('Please provide connection details.');
+              return;
+            }
+            body = JSON.stringify({ type: dbType, ...connectionDetails });
+          }
           const response = await fetchWithRetry('/api/load-db', {
             method: 'POST',
-            body: formData,
+            body,
+            headers: dbType !== 'sqlite' ? { 'Content-Type': 'application/json' } : undefined,
           });
           const data = await response.json();
           if (data.success) {
             setIsDbLoaded(true);
-            setCurrentDb(dbFile.name); // Set the current database name
+            setCurrentDb(dbType === 'sqlite' ? dbFile.name : `${dbType} Database`);
             alert('Database loaded successfully!');
-            setDbFile(null); // Reset file input after load
+            setDbFile(null);
+            setConnectionDetails({});
           } else {
             alert('Error: ' + data.error);
           }
@@ -153,23 +174,74 @@
             <div className="mb-4">
               <label className="text-sm text-gray-600">Database Type:</label>
               <select
-                value="sqlite"
-                onChange={(e) => {/* TODO: Handle database type change */}}
+                value={dbType}
+                onChange={handleDbTypeChange}
                 className="ml-2 p-1 border border-gray-300 rounded"
                 disabled={isDbLoading}
               >
                 <option value="sqlite">SQLite</option>
-                {/* Future options: <option value="mssql">MSSQL</option>, <option value="mongodb">MongoDB</option> */}
+                <option value="mssql">MSSQL</option>
+                <option value="mongodb">MongoDB</option>
               </select>
             </div>
-            <input
-              type="file"
-              accept=".db,.sqlite"
-              onChange={(e) => setDbFile(e.target.files[0])}
-              className="mb-2 p-2 border border-gray-300 rounded w-full"
-              disabled={isDbLoading}
-              key={isDbLoaded ? 'loaded' : 'not-loaded'}
-            />
+            {dbType === 'sqlite' ? (
+              <input
+                type="file"
+                accept=".db,.sqlite"
+                onChange={(e) => setDbFile(e.target.files[0])}
+                className="mb-2 p-2 border border-gray-300 rounded w-full"
+                disabled={isDbLoading}
+                key={isDbLoaded ? 'loaded' : 'not-loaded'}
+              />
+            ) : dbType === 'mssql' ? (
+              <div>
+                <input
+                  type="text"
+                  placeholder="Server"
+                  onChange={(e) => setConnectionDetails(prev => ({ ...prev, server: e.target.value }))}
+                  className="mb-2 p-2 border border-gray-300 rounded w-full"
+                  disabled={isDbLoading}
+                />
+                <input
+                  type="text"
+                  placeholder="Database"
+                  onChange={(e) => setConnectionDetails(prev => ({ ...prev, database: e.target.value }))}
+                  className="mb-2 p-2 border border-gray-300 rounded w-full"
+                  disabled={isDbLoading}
+                />
+                <input
+                  type="text"
+                  placeholder="User"
+                  onChange={(e) => setConnectionDetails(prev => ({ ...prev, user: e.target.value }))}
+                  className="mb-2 p-2 border border-gray-300 rounded w-full"
+                  disabled={isDbLoading}
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  onChange={(e) => setConnectionDetails(prev => ({ ...prev, password: e.target.value }))}
+                  className="mb-2 p-2 border border-gray-300 rounded w-full"
+                  disabled={isDbLoading}
+                />
+              </div>
+            ) : dbType === 'mongodb' ? (
+              <div>
+                <input
+                  type="text"
+                  placeholder="MongoDB URL"
+                  onChange={(e) => setConnectionDetails(prev => ({ ...prev, url: e.target.value }))}
+                  className="mb-2 p-2 border border-gray-300 rounded w-full"
+                  disabled={isDbLoading}
+                />
+                <input
+                  type="text"
+                  placeholder="Database Name"
+                  onChange={(e) => setConnectionDetails(prev => ({ ...prev, dbName: e.target.value }))}
+                  className="mb-2 p-2 border border-gray-300 rounded w-full"
+                  disabled={isDbLoading}
+                />
+              </div>
+            ) : null}
             <button
               onClick={loadDatabase}
               disabled={isDbLoading}

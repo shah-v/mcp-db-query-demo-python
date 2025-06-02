@@ -9,7 +9,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 import path from 'path';
 import fs2 from 'fs';
-import { Database, SQLiteDatabaseImpl } from './database';
+import { createDatabase, Database, DatabaseConfig, SQLiteDatabaseImpl } from './database';
 
 // Logging setup
 const logFile = path.join(__dirname, 'mcp-server.log');
@@ -60,7 +60,7 @@ async function ensureSchemaLoaded() {
 
   let db: Database | null = null;
 
-  async function reloadDb() {
+  async function reloadDb(): Promise<void> {
     try {
       if (db) {
         await db.close();
@@ -68,17 +68,21 @@ async function ensureSchemaLoaded() {
         db = null;
       }
       const configData = await fs.readFile('db-config.txt', 'utf8');
-      const config: { type: string; path: string; name: string } = JSON.parse(configData);
-      if (config.type === 'sqlite') {
-        db = new SQLiteDatabaseImpl(config.path);
-        await db.connect();
-        logToFile(`Connected to SQLite database: "${config.path}"`);
-      } else {
-        throw new Error(`Unsupported database type: ${config.type}`);
-      }
-      // ... rest of the function remains the same ...
-    } catch (error) {
-      logToFile(`Failed to reload database or schema: ${error}`);
+      const config: DatabaseConfig = JSON.parse(configData);
+      db = createDatabase(config);
+      await db.connect();
+      logToFile(`Connected to ${config.type} database`);
+  
+      // Reload schema to match the new database
+      schemaInfo = await fs.readFile('schema.txt', 'utf8');
+      logToFile(`Schema reloaded: "${schemaInfo}"`);
+  
+      // Clear caches for the new database
+      sqlCache.clear();
+      resultCache.clear();
+      logToFile('SQL and result caches cleared');
+    } catch (error: any) {
+      logToFile(`Failed to reload database or schema: ${error.message}`);
       throw new Error('Failed to reload database or schema');
     }
   }
@@ -99,58 +103,56 @@ const genAI = new GoogleGenerativeAI(apiKey);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // Function to generate SQL with Gemini
-async function generateSqlWithGemini(mode: string, userQuery: string): Promise<string> {
-  // Check if the SQL query is already cached
-  const cacheKey = `${mode}:${userQuery}`;
-  if (sqlCache.has(cacheKey)) {
-    console.log(`SQL query retrieved from cache for: "${cacheKey}"`);
-    return sqlCache.get(cacheKey)!;
-  }
-
-  // Detect mode from user query
-  let actualQuery = userQuery.trim();
-  if (actualQuery.toLowerCase().startsWith('search:')) {
-    mode = 'search';
-    actualQuery = actualQuery.substring(7).trim();
-  } else if (actualQuery.toLowerCase().startsWith('modify:')) {
-    mode = 'modify';
-    actualQuery = actualQuery.substring(7).trim();
-  }
-
-  // Generate mode-specific prompt
-  let prompt;
-  if (mode === 'search') {
-    prompt = `${schemaInfo}\n\nUser query: '${actualQuery}'\nYou are in SEARCH MODE. Generate a SELECT SQL query to retrieve the relevant information based on the user's query. Ensure the query starts with SELECT and retrieves data without modifying the database (e.g., no INSERT, UPDATE, DELETE, CREATE, ALTER). Wrap the SQL query in a code block:\n\`\`\`sql\n<your query here>\n\`\`\``;
-    logToFile(`Generated SEARCH MODE prompt: "${prompt}"`);
-  } else {
-    prompt = `${schemaInfo}\n\nUser query: '${actualQuery}'\nYou are in MODIFY MODE. Generate an appropriate SQL query based on the user's query, which may include INSERT, UPDATE, DELETE, CREATE, ALTER, etc. Wrap the SQL query in a code block:\n\`\`\`sql\n<your query here>\n\`\`\``;
-    logToFile(`Generated MODIFY MODE prompt: "${prompt}"`);
-  }
-
-  const result = await model.generateContent(prompt);
-  const response = result.response;
-  const text = response.text();
-
-  const sqlMatch = text.match(/```(?:sql)?\n([\s\S]*?)\n```/);
-  const sqlQuery = sqlMatch ? sqlMatch[1].trim() : text.trim();
-
-  // Cache the generated SQL query
-  sqlCache.set(cacheKey, sqlQuery);
-  return sqlQuery;
-}
-
-async function executeSql(sql: string, mode: string): Promise<any> {
-    if (resultCache.has(sql)) {
-      return resultCache.get(sql)!;
+async function generateQueryWithGemini(mode: string, userQuery: string, dbType: string): Promise<string | object> {
+    const cacheKey = `${mode}:${userQuery}:${dbType}`;
+    if (sqlCache.has(cacheKey)) {
+      console.log(`Query retrieved from cache for: "${cacheKey}"`);
+      return sqlCache.get(cacheKey)!;
     }
-    if (mode === 'search' && !sql.trim().toUpperCase().startsWith('SELECT')) {
-      throw new Error('Only SELECT queries are allowed in Search Mode');
+  
+    let prompt;
+    if (dbType === 'mongodb') {
+      prompt = `${schemaInfo}\n\nUser query: '${userQuery}'\nGenerate a MongoDB query object for the following operation in SEARCH MODE. Wrap the query in a code block:\n\`\`\`json\n{ "collection": "collectionName", "operation": "find", "filter": { ... } }\n\`\`\``;
+    } else {
+      prompt = `${schemaInfo}\n\nUser query: '${userQuery}'\nYou are in ${mode.toUpperCase()} MODE. Generate an SQL query...`; // Existing SQL prompt
+    }
+  
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+  
+    let query: string;
+    if (dbType === 'mongodb') {
+      const match = text.match(/```json\n([\s\S]*?)\n```/);
+      query = match ? JSON.parse(match[1]) : text.trim();
+    } else {
+      const sqlMatch = text.match(/```sql\n([\s\S]*?)\n```/);
+      query = sqlMatch ? sqlMatch[1].trim() : text.trim();
+    }
+  
+    sqlCache.set(cacheKey, query);
+    return query;
+  }
+
+  async function executeQuery(query: string | object, mode: string, dbType: string): Promise<any[]> {
+    const cacheKey = JSON.stringify(query);
+    if (resultCache.has(cacheKey)) {
+      return resultCache.get(cacheKey)!;
     }
     if (!db) {
       throw new Error('Database connection not initialized');
     }
-    const rows = await db.query(sql);
-    resultCache.set(sql, rows);
+    let rows: any[];
+    if (dbType === 'mongodb') {
+      if (typeof query !== 'object') throw new Error('MongoDB query must be an object');
+      rows = await db.query(query);
+    } else {
+      if (typeof query !== 'string') throw new Error('SQL query must be a string');
+      if (mode === 'search' && !query.trim().toUpperCase().startsWith('SELECT')) {
+        throw new Error('Only SELECT queries are allowed in Search Mode');
+      }
+      rows = await db.query(query);
+    }
+    resultCache.set(cacheKey, rows);
     return rows;
   }
 
@@ -170,54 +172,40 @@ async function generateExplanation(userQuery: string, results: any[]): Promise<s
 
 // Define the "query_database" tool for MCP
 server.tool(
-  "query_database",
-  { query: z.string() },
-  async (args, extra) => {
-    await ensureSchemaLoaded();
-
-    // Reload database connection to use the latest db-config.txt
-    try {
+    "query_database",
+    { query: z.string() },
+    async (args) => {
+      await ensureSchemaLoaded();
+      try {
         await reloadDb();
       } catch (error: any) {
-        logToFile(`Failed to reload database in query_database: ${error.message}`);
-        return {
-          content: [{ type: "text", text: `Error: ${error.message}` }],
-          isError: true,
-        };
+        logToFile(`Failed to reload database: ${error.message}`);
+        return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
       }
-
-    let originalQuery = args.query;
-    let userQuery = originalQuery.trim();
-
-    let mode = 'search'; // Default to search mode
-    if (userQuery.toLowerCase().startsWith('search:')) {
-      mode = 'search';
-      userQuery = userQuery.substring(7).trim();
-    } else if (userQuery.toLowerCase().startsWith('modify:')) {
-      mode = 'modify';
-      userQuery = userQuery.substring(7).trim();
-    }
-
-    try {
-      const sqlQuery = await generateSqlWithGemini(mode, userQuery);
-      const result = await executeSql(sqlQuery, mode);
-      const explanation = await generateExplanation(userQuery, result);
-      return {
-        content: [
-          {
+  
+      const configData = await fs.readFile('db-config.txt', 'utf8');
+      const config: DatabaseConfig = JSON.parse(configData);
+      const dbType = config.type;
+  
+      const userQuery = args.query.trim();
+      const mode = userQuery.toLowerCase().startsWith('modify:') ? 'modify' : 'search';
+      const queryText = userQuery.replace(/^(search|modify):/i, '').trim();
+  
+      try {
+        const query = await generateQueryWithGemini(mode, queryText, dbType);
+        const result = await executeQuery(query, mode, dbType);
+        const explanation = await generateExplanation(queryText, result);
+        return {
+          content: [{
             type: "text",
-            text: JSON.stringify({ results: result, sqlQuery, explanation }),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: `Error: ${error.message}` }],
-        isError: true,
-      };
+            text: JSON.stringify({ results: result, sqlQuery: query, explanation })
+          }]
+        };
+      } catch (error: any) {
+        return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
+      }
     }
-  }
-);
+  );
 
 // Start the MCP server after loading schema and initializing DB
 (async () => {
