@@ -1,5 +1,5 @@
 import { promisify } from 'util';
-import { Database, DatabaseConfig } from './database';
+import { Database, DatabaseConfig } from '../database';
 
 export class SQLiteDatabaseImpl extends Database {
     private db: import('sqlite3').Database | null = null;

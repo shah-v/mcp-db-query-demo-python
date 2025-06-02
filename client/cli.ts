@@ -20,7 +20,7 @@ function askQuery() {
     // Connect to the MCP server and send the query
     const transport = new StdioClientTransport({
       command: "npx",
-      args: ["ts-node", "server.ts"],
+      args: ["ts-node", "server/server.ts"],
     });
     const client = new Client({ name: "cli-client", version: "1.0.0" });
     try {

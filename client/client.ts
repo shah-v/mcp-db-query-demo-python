@@ -5,7 +5,7 @@ async function testQueryDatabase(query: string) {
   // Set up the transport to talk to server.ts
   const transport = new StdioClientTransport({
     command: "npx",
-    args: ["ts-node", "server.ts"], // This runs your server
+    args: ["ts-node", "server/server.ts"], // This runs your server
   });
 
   // Create a client to send requests

@@ -1,5 +1,5 @@
 import { ConnectionPool } from 'mssql';
-import { Database, DatabaseConfig } from './database';
+import { Database, DatabaseConfig } from '../database';
 
 export class MSSQLDatabaseImpl extends Database {
     private pool: ConnectionPool | null = null;

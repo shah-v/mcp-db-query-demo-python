@@ -1,7 +1,7 @@
 import express from 'express';
-import './database-registry';
+import '../database/database-registry';
 import cors from 'cors';
-import { createDatabase, Database, DatabaseConfig } from './database';
+import { createDatabase, Database, DatabaseConfig } from '../database/database';
 import { promisify } from "util";
 import fs from 'fs/promises';
 import * as dotenv from 'dotenv';
@@ -46,7 +46,7 @@ app.post('/api/load-db', upload.single('dbFile'), async (req: express.Request, r
           res.status(400).json({ success: false, error: 'No file uploaded for SQLite' });
           return;
         }
-        const dbFilePath = path.join(__dirname, 'uploads', 'current.db');
+        const dbFilePath = path.join(__dirname, '..', 'uploads', 'current.db');
         await fs.rename(file.path, dbFilePath);
         config = { type: 'sqlite', path: dbFilePath, name: file.originalname };
       } else if (type === 'mssql') {

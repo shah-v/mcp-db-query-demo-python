@@ -17,12 +17,12 @@ app.use('/api/load-db', createProxyMiddleware({ target: 'http://localhost:3001/a
 app.use('/api/is-db-loaded', createProxyMiddleware({ target: 'http://localhost:3001/api/is-db-loaded', changeOrigin: true, logger: console }));
 
 app.use(express.json()); // Parse JSON request bodies
-app.use(express.static('.')); // Serve static files like index.html
+app.use(express.static('static')); // Serve static files like index.html
 
 // Create the transport using the existing process
 const transport = new StdioClientTransport({
   command: 'npx',
-  args: ['ts-node', 'mcp-server.ts'],
+  args: ['ts-node', 'server/mcp-server.ts'],
 });
 
 const client = new Client({ name: 'web-client', version: '1.0.0' });

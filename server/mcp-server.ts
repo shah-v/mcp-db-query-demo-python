@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import './database-registry';
+import '../database/database-registry';
 import sqlite3 from "sqlite3";
 import { promisify } from "util";
 import { z } from "zod";
@@ -10,7 +10,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 import path from 'path';
 import fs2 from 'fs';
-import { createDatabase, Database, DatabaseConfig } from './database';
+import { createDatabase, Database, DatabaseConfig } from '../database/database';
 
 // Logging setup
 const logFile = path.join(__dirname, 'mcp-server.log');

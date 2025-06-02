@@ -1,7 +1,7 @@
 import { databaseRegistry } from './database';
-import { MSSQLDatabaseImpl } from './mssql-database';
-import { MongoDBDatabaseImpl } from './mongodb-database';
-import { SQLiteDatabaseImpl } from './sqlite-database';
+import { MSSQLDatabaseImpl } from './implementations/mssql-database';
+import { MongoDBDatabaseImpl } from './implementations/mongodb-database';
+import { SQLiteDatabaseImpl } from './implementations/sqlite-database';
 
 // Register MSSQL implementation
 databaseRegistry.set('mssql', MSSQLDatabaseImpl);
