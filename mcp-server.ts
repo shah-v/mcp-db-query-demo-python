@@ -10,7 +10,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 import path from 'path';
 import fs2 from 'fs';
-import { createDatabase, Database, DatabaseConfig, SQLiteDatabaseImpl } from './database';
+import { createDatabase, Database, DatabaseConfig } from './database';
 
 // Logging setup
 const logFile = path.join(__dirname, 'mcp-server.log');

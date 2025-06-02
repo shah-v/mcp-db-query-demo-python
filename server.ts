@@ -1,7 +1,7 @@
 import express from 'express';
 import './database-registry';
 import cors from 'cors';
-import { createDatabase, Database, DatabaseConfig, SQLiteDatabaseImpl } from './database';
+import { createDatabase, Database, DatabaseConfig } from './database';
 import { promisify } from "util";
 import fs from 'fs/promises';
 import * as dotenv from 'dotenv';
