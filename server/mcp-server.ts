@@ -11,10 +11,11 @@ dotenv.config();
 import path from 'path';
 import fs2 from 'fs';
 import { createDatabase, Database, DatabaseConfig } from '../database/database';
+import { createAIProvider } from "./ai-provider-factory";
 
 // Logging setup
 const logFile = path.join(__dirname, 'mcp-server.log');
-function logToFile(message: string) {
+export function logToFile(message: string) {
   fs2.appendFileSync(logFile, `${new Date().toISOString()} - ${message}\n`);
 }
 
@@ -22,7 +23,7 @@ function logToFile(message: string) {
 let schemaInfo: string | null = null;
 
 // Cache for generated SQL queries (userQuery -> sqlQuery)
-const sqlCache: Map<string, string> = new Map();
+const sqlCache: Map<string, string | object> = new Map();
 
 // Cache for query results (sqlQuery -> results)
 const resultCache: Map<string, any[]> = new Map();
@@ -94,45 +95,24 @@ const server = new McpServer({
   version: "1.0.0",
 });
 
-// Set up Gemini API client
-const apiKey = process.env.GEMINI_API_KEY || "";
-if (!apiKey) {
-  logToFile('GEMINI_API_KEY is not set in the .env file - throwing error');
-  throw new Error("GEMINI_API_KEY is not set in the .env file");
-}
-const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const aiProvider = createAIProvider();
 
-// Function to generate SQL with Gemini
-async function generateQueryWithGemini(mode: string, userQuery: string, dbType: string): Promise<string | object> {
+async function generateQuery(mode: string, userQuery: string, dbType: string): Promise<string | object> {
     const cacheKey = `${mode}:${userQuery}:${dbType}`;
     if (sqlCache.has(cacheKey)) {
-      console.log(`Query retrieved from cache for: "${cacheKey}"`);
-      return sqlCache.get(cacheKey)!;
+        console.log(`Query retrieved from cache for: "${cacheKey}"`);
+        return sqlCache.get(cacheKey)!;
     }
-  
-    let prompt;
-    if (dbType === 'mongodb') {
-      prompt = `${schemaInfo}\n\nUser query: '${userQuery}'\nGenerate a MongoDB query object for the following operation in SEARCH MODE. Wrap the query in a code block:\n\`\`\`json\n{ "collection": "collectionName", "operation": "find", "filter": { ... } }\n\`\`\``;
-    } else {
-      prompt = `${schemaInfo}\n\nUser query: '${userQuery}'\nYou are in ${mode.toUpperCase()} MODE. Generate an SQL query...`; // Existing SQL prompt
-    }
-  
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-  
-    let query: string;
-    if (dbType === 'mongodb') {
-      const match = text.match(/```json\n([\s\S]*?)\n```/);
-      query = match ? JSON.parse(match[1]) : text.trim();
-    } else {
-      const sqlMatch = text.match(/```sql\n([\s\S]*?)\n```/);
-      query = sqlMatch ? sqlMatch[1].trim() : text.trim();
-    }
-  
+    await ensureSchemaLoaded();
+    const query = await aiProvider.generateQuery(schemaInfo!, mode, userQuery, dbType);
+    logToFile(`Generated query: ${query}`);
     sqlCache.set(cacheKey, query);
     return query;
-  }
+}
+
+async function generateExplanation(userQuery: string, results: any[]): Promise<string> {
+    return aiProvider.generateExplanation(userQuery, results);
+}
 
   async function executeQuery(query: string | object, mode: string, dbType: string): Promise<any[]> {
     const cacheKey = JSON.stringify(query);
@@ -157,19 +137,6 @@ async function generateQueryWithGemini(mode: string, userQuery: string, dbType: 
     return rows;
   }
 
-// Function to generate explanation with Gemini
-async function generateExplanation(userQuery: string, results: any[]): Promise<string> {
-  let prompt;
-  if (results.length === 0) {
-    prompt = `The user's query was: '${userQuery}'. No data was found in the database. Provide a natural language response indicating that no information is available.`;
-  } else {
-    prompt = `The user's query was: '${userQuery}'. The database returned the following results: ${JSON.stringify(results)}. Provide a concise natural language summary of these results, strictly based on the data provided. Do not include any information not present in the results.`;
-  }
-  const result = await model.generateContent(prompt);
-  const response = result.response;
-  const text = response.text();
-  return text;
-}
 
 // Define the "query_database" tool for MCP
 server.tool(
@@ -193,7 +160,7 @@ server.tool(
       const queryText = userQuery.replace(/^(search|modify):/i, '').trim();
   
       try {
-        const query = await generateQueryWithGemini(mode, queryText, dbType);
+        const query = await generateQuery(mode, queryText, dbType);
         const result = await executeQuery(query, mode, dbType);
         const explanation = await generateExplanation(queryText, result);
         return {
