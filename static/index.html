@@ -29,18 +29,19 @@
     const { useState, useEffect } = React;
 
     // Retry function with exponential backoff
-    async function fetchWithRetry(url, options = {}, retries = 3, backoff = 300) {
+    async function fetchWithRetry(url, fetchOptions = {}, retryOptions = { enabled: true, retries: 3, backoff: 300 }) {
+      const { enabled, retries, backoff } = retryOptions;
       try {
-        const response = await fetch(url, options);
+        const response = await fetch(url, fetchOptions);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         return response;
       } catch (error) {
-        if (retries > 0) {
+        if (enabled && retries > 0) {
           console.log(`Retrying request to ${url}... attempts left: ${retries}`);
           await new Promise(resolve => setTimeout(resolve, backoff));
-          return fetchWithRetry(url, options, retries - 1, backoff * 2);
+          return fetchWithRetry(url, fetchOptions, { enabled, retries: retries - 1, backoff: backoff * 2 });
         }
         throw error;
       }
@@ -97,7 +98,7 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query: finalQuery }),
-          });
+          }, { enabled: false });
           const data = await response.json();
           if (response.ok) {
             setMessages(prev => [...prev, { type: 'system', content: data }]);
@@ -134,7 +135,7 @@
             method: 'POST',
             body,
             headers: dbType !== 'sqlite' ? { 'Content-Type': 'application/json' } : undefined,
-          });
+          }, { enabled: true, retries: 3, backoff: 300 });
           const data = await response.json();
           if (data.success) {
             setIsDbLoaded(true);

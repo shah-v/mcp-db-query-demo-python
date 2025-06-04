@@ -11,7 +11,7 @@ export class HuggingFaceAIProvider implements AIProvider {
     private model: string;
     private endpoint: string = 'https://api-inference.huggingface.co/models';
 
-    constructor(apiKey: string, model: string = 'deepseek-ai/DeepSeek-R1-0528') {
+    constructor(apiKey: string, model: string = 'meta-llama/Meta-Llama-3-8B') {
         this.apiKey = apiKey;
         this.model = model;
     }
@@ -22,13 +22,40 @@ export class HuggingFaceAIProvider implements AIProvider {
             ? `Given the schema: ${schemaInfo}\nGenerate a MongoDB query object to search for: "${userQuery}".\nUse "find".\nExample: "find users over 25" becomes:\n\`\`\`json\n{ "collection": "users", "operation": "find", "filter": { "age": { "$gt": 25 } } }\n\`\`\`\nReturn only the query object in a code block like that.`
             : `Given the schema: ${schemaInfo}\nGenerate a MongoDB query object to modify the database for: "${userQuery}".\nUse "insertOne", "updateOne", or "deleteOne".\nExample: "add a user named John aged 30" becomes:\n\`\`\`json\n{ "collection": "users", "operation": "insertOne", "document": { "name": "John", "age": 30 } }\n\`\`\`\nReturn only the query object in a code block like that.`
         : mode === 'search'
-            ? `Given the schema: ${schemaInfo}\nGenerate a SQL SELECT query for: "${userQuery}".\nExample: "show all users over 25" becomes:\n\`\`\`sql\nSELECT * FROM users WHERE age > 25\n\`\`\`\nReturn only the query in a code block like that.`
+            ? `You are an expert SQL query generator. Given the following database schema:
+
+                ${schemaInfo}
+
+                Tables and columns:
+                - manufacturers(id, name, location)
+                - clothes(id, manufacturer_id, type, size, color, price)
+                - stores(id, name, location)
+                - customers(id, name, email, address)
+                - sales(id, customer_id, clothing_id, store_id, sale_date, quantity)
+
+                Generate a SQL SELECT query (using standard ANSI SQL) to answer the user's question: "${userQuery}"
+
+                Instructions:
+                1. Identify which table and column(s) are needed. In this schema, "clothes.type" holds the clothing type (e.g., "pants", "shirts").
+                2. If the user is asking for a count, use "COUNT(*)".
+                3. Return only the SQL query inside a code block like this:
+                SELECT ...;
+                4. Do not include any explanation, comments, or extra text—only the SQL statement.
+
+                Example:
+                - If the user asks "How many pants are there?", your answer should be exactly:
+                SELECT COUNT(*) AS total_pants
+                FROM clothes
+                WHERE type = 'pants';
+
+                Now, generate the query for: "${userQuery}".
+                `
             : `Given the schema: ${schemaInfo}\nGenerate a SQL query (INSERT, UPDATE, or DELETE) to modify the database for: "${userQuery}".\nExample: "add a user named John aged 30" becomes:\n\`\`\`sql\nINSERT INTO users (name, age) VALUES ('John', 30)\n\`\`\`\nReturn only the query in a code block like that.`;
 
         logToFile(`Generated prompt: ${prompt}`);
         const response = await axios.post<HuggingFaceResponse[]>(
             `${this.endpoint}/${this.model}`,
-            { inputs: prompt },
+            { inputs: prompt, parameters: { return_full_text: false } },
             { headers: { Authorization: `Bearer ${this.apiKey}` } }
         );
         const text = Array.isArray(response.data) && response.data[0]?.generated_text
@@ -50,7 +77,7 @@ export class HuggingFaceAIProvider implements AIProvider {
 
         const response = await axios.post<HuggingFaceResponse[]>(
             `${this.endpoint}/${this.model}`,
-            { inputs: prompt },
+            { inputs: prompt, parameters: { return_full_text: false } },
             { headers: { Authorization: `Bearer ${this.apiKey}` } }
         );
         const text = Array.isArray(response.data) && response.data[0]?.generated_text
