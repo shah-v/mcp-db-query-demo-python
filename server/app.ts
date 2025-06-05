@@ -5,6 +5,11 @@ import { z } from 'zod';
 import { spawn } from 'child_process';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
+interface QueryRequestBody {
+  query: string;
+  aiProvider: string;
+}
+
 const QueryToolSchema = z.object({
     content: z.array(z.object({ text: z.string() })),
     isError: z.boolean().optional()
@@ -54,8 +59,8 @@ connectWithRetry();
 
 // Handle /api/query requests using the persistent client
 app.post('/api/query', async (req: any, res: any) => {
-  const { query } = req.body;
-  console.log(`Received query: "${query}"`);
+  const { query, aiProvider } = req.body;
+  console.log(`Received query: "${query}" with AI provider: "${aiProvider}"`);
   if (!isClientConnected) {
     return res.status(503).json({ error: 'MCP server not yet connected, please try again later' });
   }
@@ -63,7 +68,7 @@ app.post('/api/query', async (req: any, res: any) => {
     const startTime = Date.now();
     const resultRaw = await client.callTool({
       name: 'query_database',
-      arguments: { query },
+      arguments: { query, aiProvider },
     });
     const duration = Date.now() - startTime;
     console.log(`Query "${query}" processed in ${duration}ms`);

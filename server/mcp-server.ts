@@ -12,6 +12,10 @@ import path from 'path';
 import fs2 from 'fs';
 import { createDatabase, Database, DatabaseConfig } from '../database/database';
 import { createAIProvider } from "./ai-provider-factory";
+import { GeminiAIProvider } from "./gemini-ai-provider";
+import { HuggingFaceAIProvider } from "./huggingface-ai-provider";
+import { AIProvider } from "./ai-provider";
+import { NovitaAIProvider } from "./novita-ai-provider";
 
 // Logging setup
 const logFile = path.join(__dirname, 'mcp-server.log');
@@ -97,22 +101,7 @@ const server = new McpServer({
 
 const aiProvider = createAIProvider();
 
-async function generateQuery(mode: string, userQuery: string, dbType: string): Promise<string | object> {
-    const cacheKey = `${mode}:${userQuery}:${dbType}`;
-    if (sqlCache.has(cacheKey)) {
-        console.log(`Query retrieved from cache for: "${cacheKey}"`);
-        return sqlCache.get(cacheKey)!;
-    }
-    await ensureSchemaLoaded();
-    const query = await aiProvider.generateQuery(schemaInfo!, mode, userQuery, dbType);
-    logToFile(`Generated query: ${query}`);
-    sqlCache.set(cacheKey, query);
-    return query;
-}
 
-async function generateExplanation(userQuery: string, results: any[]): Promise<string> {
-    return aiProvider.generateExplanation(userQuery, results);
-}
 
   async function executeQuery(query: string | object, mode: string, dbType: string): Promise<any[]> {
     const cacheKey = JSON.stringify(query);
@@ -140,40 +129,75 @@ async function generateExplanation(userQuery: string, results: any[]): Promise<s
 
 // Define the "query_database" tool for MCP
 server.tool(
-    "query_database",
-    { query: z.string() },
-    async (args) => {
-      await ensureSchemaLoaded();
-      try {
-        await reloadDb();
-      } catch (error: any) {
-        logToFile(`Failed to reload database: ${error.message}`);
-        return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
-      }
-  
-      const configData = await fs.readFile('db-config.txt', 'utf8');
-      const config: DatabaseConfig = JSON.parse(configData);
-      const dbType = config.type;
-  
-      const userQuery = args.query.trim();
-      const mode = userQuery.toLowerCase().startsWith('modify:') ? 'modify' : 'search';
-      const queryText = userQuery.replace(/^(search|modify):/i, '').trim();
-  
-      try {
-        const query = await generateQuery(mode, queryText, dbType);
-        const result = await executeQuery(query, mode, dbType);
-        const explanation = await generateExplanation(queryText, result);
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({ results: result, sqlQuery: query, explanation })
-          }]
-        };
-      } catch (error: any) {
-        return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
-      }
+  "query_database",
+  { 
+    query: z.string(),
+    aiProvider: z.string()
+  },
+  async (args) => {
+    const { query, aiProvider: aiProviderStr } = args;
+    await ensureSchemaLoaded();
+    try {
+      await reloadDb();
+    } catch (error: any) {
+      logToFile(`Failed to reload database: ${error.message}`);
+      return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
     }
-  );
+
+    const configData = await fs.readFile('db-config.txt', 'utf8');
+    const config: DatabaseConfig = JSON.parse(configData);
+    const dbType = config.type;
+
+    const userQuery = query.trim();
+    const mode = userQuery.toLowerCase().startsWith('modify:') ? 'modify' : 'search';
+    const queryText = userQuery.replace(/^(search|modify):/i, '').trim();
+
+    // Dynamically create AI provider
+    let aiProvider: AIProvider;
+    if (aiProviderStr === 'gemini') {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
+        aiProvider = new GeminiAIProvider(apiKey);
+    } else if (aiProviderStr.startsWith('huggingface:')) {
+        const model = aiProviderStr.split(':')[1];
+        const apiKey = process.env.HUGGINGFACE_API_KEY;
+        if (!apiKey) throw new Error('HUGGINGFACE_API_KEY is not set');
+        aiProvider = new HuggingFaceAIProvider(apiKey, model);
+    } else if (aiProviderStr.startsWith('novita:')) {
+        const model = aiProviderStr.split(':')[1];
+        const apiKey = process.env.HUGGINGFACE_API_KEY; // Reuse HF key, or use NOVITA_API_KEY if separate
+        if (!apiKey) throw new Error('HUGGINGFACE_API_KEY is not set');
+        aiProvider = new NovitaAIProvider(apiKey, model);
+    } else {
+        throw new Error(`Unsupported AI provider: ${aiProviderStr}`);
+    }
+
+    logToFile(`Using AI provider: ${aiProviderStr}`);
+
+    try {
+      // Inside the try block:
+      const query = await aiProvider.generateQuery({
+          schemaInfo: schemaInfo!,
+          mode,
+          userQuery: queryText,
+          dbType,
+      });
+      const result = await executeQuery(query, mode, dbType);
+      const explanation = await aiProvider.generateExplanation({
+          userQuery: queryText,
+          results: result,
+      });
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({ results: result, sqlQuery: query, explanation })
+        }]
+      };
+    } catch (error: any) {
+      return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
+    }
+  }
+);
 
 // Start the MCP server after loading schema and initializing DB
 (async () => {

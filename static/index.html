@@ -54,6 +54,7 @@
       const [isQueryLoading, setIsQueryLoading] = useState(false);
       const [isDbLoaded, setIsDbLoaded] = useState(false);
       const [mode, setMode] = useState('search');
+      const [aiProvider, setAiProvider] = useState('gemini');
       const [dbFile, setDbFile] = useState(null);
       const [currentDb, setCurrentDb] = useState(null);
       const [dbType, setDbType] = useState('sqlite');
@@ -97,7 +98,7 @@
           const response = await fetchWithRetry('/api/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: finalQuery }),
+            body: JSON.stringify({ query: finalQuery, aiProvider }),
           }, { enabled: false });
           const data = await response.json();
           if (response.ok) {
@@ -390,6 +391,16 @@
                 >
                   <option value="search">Search Mode</option>
                   <option value="modify">Modify Mode</option>
+                </select>
+              </div>
+              <div className="mb-2">
+                <label className="text-sm text-gray-600">AI Provider:</label>
+                <select value={aiProvider} onChange={(e) => setAiProvider(e.target.value)}>
+                    <option value="gemini">Gemini 1.5 Flash</option>
+                    <option value="huggingface:mistralai/Mixtral-8x7B-Instruct-v0.1">Hugging Face: Mistral</option>
+                    <option value="huggingface:Qwen/Qwen2.5-7B-Instruct">Hugging Face: Qwen</option>
+                    <option value="huggingface:deepseek-ai/DeepSeek-R1">Hugging Face: DeepSeek</option>
+                    <option value="novita:deepseek/deepseek-r1-turbo">Novita: DeepSeek</option>
                 </select>
               </div>
               <textarea

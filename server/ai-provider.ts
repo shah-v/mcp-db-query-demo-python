@@ -1,4 +1,12 @@
 export interface AIProvider {
-    generateQuery(schemaInfo: string, mode: string, userQuery: string, dbType: string): Promise<string | object>;
-    generateExplanation(userQuery: string, results: any[]): Promise<string>;
+    generateQuery(params: {
+        schemaInfo: string;
+        mode: string;
+        userQuery: string;
+        dbType: string;
+    }): Promise<string | object>;
+    generateExplanation(params: {
+        userQuery: string;
+        results: any[];
+    }): Promise<string>;
 }
