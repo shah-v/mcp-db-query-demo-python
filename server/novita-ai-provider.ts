@@ -54,22 +54,31 @@ export class NovitaAIProvider implements AIProvider {
         results: any[];
     }): Promise<string> {
         const prompt = generateExplanationPrompt(params);
-        
+    
         const payload = {
-            messages: [{ role: 'user', content: prompt }],
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a concise summarizer. Output only the final natural-language summary—no reasoning steps, no <think> tags.'
+                },
+                { role: 'user', content: prompt }
+            ],
             model: this.model,
             stream: false,
         };
-
+    
         const headers = { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' };
         logToFile(`Novita API Request explanation:
         URL: ${this.endpoint}
         Headers: ${JSON.stringify(headers)}
         Payload: ${JSON.stringify(payload)}`);
         const response = await axios.post<NovitaResponse>(this.endpoint, payload, { headers });
-
-        return response.data.choices[0].message.content;
+    
+        const raw = response.data.choices[0].message.content;
+        const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        return cleaned;
     }
+    
 
     private extractQuery(text: string, dbType: string): string | object {
         const withoutThink = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
