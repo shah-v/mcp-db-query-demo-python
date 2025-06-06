@@ -29,7 +29,7 @@ export class NovitaAIProvider implements AIProvider {
     }): Promise<string | object> {
         const prompt = generateQueryPrompt(params);
         logToFile(`Generated prompt: ${prompt}`);
-        logToFile(`model: ${this.model}`)
+        logToFile(`model: ${this.model}`);
         const payload = {
             messages: [{ role: 'user', content: prompt }],
             model: this.model,
@@ -37,12 +37,16 @@ export class NovitaAIProvider implements AIProvider {
         };
         const headers = { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' };
         logToFile(`Novita API Request:
-          URL: ${this.endpoint}
-          Headers: ${JSON.stringify(headers)}
-          Payload: ${JSON.stringify(payload)}`);
+            URL: ${this.endpoint}
+            Headers: ${JSON.stringify(headers)}
+            Payload: ${JSON.stringify(payload)}`);
         const response = await axios.post<NovitaResponse>(this.endpoint, payload, { headers });
         const text = response.data.choices[0].message.content;
-        return this.extractQuery(text, params.dbType);
+        logToFile(`Novita API Response: ${JSON.stringify(text)}`);
+    
+        let query: string | object = this.extractQuery(text, params.dbType);
+        logToFile(`Novita Extracted Query: ${JSON.stringify(query)}`);
+        return query;
     }
 
     async generateExplanation(params: {
@@ -68,12 +72,15 @@ export class NovitaAIProvider implements AIProvider {
     }
 
     private extractQuery(text: string, dbType: string): string | object {
+        const withoutThink = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    
         if (dbType === 'mongodb') {
-            const match = text.match(/```json\n([\s\S]*?)\n```/);
-            return match ? JSON.parse(match[1]) : text.trim();
+            const match = withoutThink.match(/```json\n([\s\S]*?)\n```/);
+            return match ? JSON.parse(match[1]) : withoutThink;
         } else {
-            const sqlMatch = text.match(/```sql\n([\s\S]*?)\n```/);
-            return sqlMatch ? sqlMatch[1].trim() : text.trim();
+            const sqlMatch = withoutThink.match(/```sql\n([\s\S]*?)\n```/);
+            return sqlMatch ? sqlMatch[1].trim() : withoutThink;
         }
     }
+    
 }

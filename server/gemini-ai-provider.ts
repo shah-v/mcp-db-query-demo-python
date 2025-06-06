@@ -19,11 +19,12 @@ export class GeminiAIProvider implements AIProvider {
     }): Promise<string | object> {
         const prompt = generateQueryPrompt(params);
         logToFile(`Gemini API Request:
-        Model: ${this.model.model}
-        Prompt: ${prompt}`);
+            Model: ${this.model.model}
+            Prompt: ${prompt}`);
         const result = await this.model.generateContent(prompt);
         const text = result.response.text();
-
+        logToFile(`Gemini API Response: ${JSON.stringify(text)}`);
+    
         let query: string | object;
         if (params.dbType === 'mongodb') {
             const match = text.match(/```json\n([\s\S]*?)\n```/);
@@ -32,6 +33,7 @@ export class GeminiAIProvider implements AIProvider {
             const sqlMatch = text.match(/```sql\n([\s\S]*?)\n```/);
             query = sqlMatch ? sqlMatch[1].trim() : text.trim();
         }
+        logToFile(`Gemini Extracted Query: ${JSON.stringify(query)}`);
         return query;
     }
 
