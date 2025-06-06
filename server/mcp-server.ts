@@ -190,7 +190,7 @@ server.tool(
       return {
         content: [{
           type: "text",
-          text: JSON.stringify({ results: result, sqlQuery: query, explanation })
+          text: JSON.stringify({ results: result, query: query, explanation })
         }]
       };
     } catch (error: any) {

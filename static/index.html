@@ -291,9 +291,15 @@
                         </div>
                       ) : (
                         <div>
-                          <h3 className="text-lg font-medium text-gray-700 mb-2">Generated SQL Query</h3>
+                          <h3 className="text-lg font-medium text-gray-700 mb-2">Generated Query</h3>
                           <div className="bg-gray-800 text-green-400 p-4 rounded-lg font-mono text-sm overflow-x-auto mb-6">
-                            <p>{msg.content.sqlQuery || 'No SQL query generated'}</p>
+                            <p>
+                              {msg.content.query
+                                ? (typeof msg.content.query === 'string'
+                                  ? msg.content.query
+                                  : JSON.stringify(msg.content.query, null, 2))
+                                : 'No query generated'}
+                            </p>
                           </div>
                           <h3 className="text-lg font-medium text-gray-700 mb-2">Query Results</h3>
                           <div className="border border-gray-200 rounded-lg overflow-hidden mb-6">
@@ -345,9 +351,9 @@
               ))}
               {isQueryLoading && (
                 <div>
-                  <h3 className="text-lg font-medium text-gray-700 mb-2">Generated SQL Query</h3>
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">Generated Query</h3>
                   <div className="bg-gray-800 text-green-400 p-4 rounded-lg font-mono text-sm overflow-x-auto mb-6">
-                    <p className="text-gray-400 animate-pulse">Generating SQL...</p>
+                    <p className="text-gray-400 animate-pulse">Generating query...</p>
                   </div>
                   <h3 className="text-lg font-medium text-gray-700 mb-2">Query Results</h3>
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
