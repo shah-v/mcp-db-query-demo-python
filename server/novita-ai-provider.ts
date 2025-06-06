@@ -43,7 +43,7 @@ export class NovitaAIProvider implements AIProvider {
         const response = await axios.post<NovitaResponse>(this.endpoint, payload, { headers });
         const text = response.data.choices[0].message.content;
         logToFile(`Novita API Response: ${JSON.stringify(text)}`);
-    
+
         let query: string | object = this.extractQuery(text, params.dbType);
         logToFile(`Novita Extracted Query: ${JSON.stringify(query)}`);
         return query;
@@ -54,7 +54,7 @@ export class NovitaAIProvider implements AIProvider {
         results: any[];
     }): Promise<string> {
         const prompt = generateExplanationPrompt(params);
-    
+
         const payload = {
             messages: [
                 {
@@ -66,23 +66,23 @@ export class NovitaAIProvider implements AIProvider {
             model: this.model,
             stream: false,
         };
-    
+
         const headers = { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' };
         logToFile(`Novita API Request explanation:
         URL: ${this.endpoint}
         Headers: ${JSON.stringify(headers)}
         Payload: ${JSON.stringify(payload)}`);
         const response = await axios.post<NovitaResponse>(this.endpoint, payload, { headers });
-    
+
         const raw = response.data.choices[0].message.content;
         const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
         return cleaned;
     }
-    
+
 
     private extractQuery(text: string, dbType: string): string | object {
         const withoutThink = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    
+
         if (dbType === 'mongodb') {
             const match = withoutThink.match(/```json\n([\s\S]*?)\n```/);
             return match ? JSON.parse(match[1]) : withoutThink;
@@ -91,5 +91,5 @@ export class NovitaAIProvider implements AIProvider {
             return sqlMatch ? sqlMatch[1].trim() : withoutThink;
         }
     }
-    
+
 }

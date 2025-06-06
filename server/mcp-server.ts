@@ -34,64 +34,64 @@ const resultCache: Map<string, any[]> = new Map();
 
 // Load schemaInfo from file
 async function loadSchema() {
-    try {
-      schemaInfo = await fs.readFile('schema.txt', 'utf8');
-      logToFile(`Schema content: "${schemaInfo}"`);
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        logToFile('Schema file not found - starting without schema');
-        schemaInfo = null; // Initialize as null if file doesn’t exist
-      } else {
-        console.error('Unexpected error loading schema.txt:', error);
-        throw error; // Throw only for unexpected errors (e.g., permissions)
-      }
+  try {
+    schemaInfo = await fs.readFile('schema.txt', 'utf8');
+    logToFile(`Schema content: "${schemaInfo}"`);
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      logToFile('Schema file not found - starting without schema');
+      schemaInfo = null; // Initialize as null if file doesn’t exist
+    } else {
+      console.error('Unexpected error loading schema.txt:', error);
+      throw error; // Throw only for unexpected errors (e.g., permissions)
     }
   }
+}
 
 // Function to ensure schema is loaded
 async function ensureSchemaLoaded() {
-    if (!schemaInfo) {
-      logToFile('Schema not loaded - checking for schema.txt');
-      try {
-        schemaInfo = await fs.readFile('schema.txt', 'utf8');
-        logToFile(`Schema loaded: "${schemaInfo}"`);
-      } catch (error: any) {
-        if (error.code === 'ENOENT') {
-          throw new Error('No database uploaded yet - please upload a database first');
-        }
-        throw error; // Re-throw unexpected errors
-      }
-    }
-  }
-
-  let db: Database | null = null;
-
-  async function reloadDb(): Promise<void> {
+  if (!schemaInfo) {
+    logToFile('Schema not loaded - checking for schema.txt');
     try {
-      if (db) {
-        await db.close();
-        logToFile('Existing database connection closed');
-        db = null;
-      }
-      const configData = await fs.readFile('db-config.txt', 'utf8');
-      const config: DatabaseConfig = JSON.parse(configData);
-      db = createDatabase(config);
-      await db.connect();
-      logToFile(`Connected to ${config.type} database`);
-  
-      // Reload schema to match the new database
       schemaInfo = await fs.readFile('schema.txt', 'utf8');
-      logToFile(`Schema reloaded: "${schemaInfo}"`);
-  
-      // Clear caches for the new database
-      sqlCache.clear();
-      resultCache.clear();
-      logToFile('SQL and result caches cleared');
+      logToFile(`Schema loaded: "${schemaInfo}"`);
     } catch (error: any) {
-      logToFile(`Failed to reload database or schema: ${error.message}`);
-      throw new Error('Failed to reload database or schema');
+      if (error.code === 'ENOENT') {
+        throw new Error('No database uploaded yet - please upload a database first');
+      }
+      throw error; // Re-throw unexpected errors
     }
   }
+}
+
+let db: Database | null = null;
+
+async function reloadDb(): Promise<void> {
+  try {
+    if (db) {
+      await db.close();
+      logToFile('Existing database connection closed');
+      db = null;
+    }
+    const configData = await fs.readFile('db-config.txt', 'utf8');
+    const config: DatabaseConfig = JSON.parse(configData);
+    db = createDatabase(config);
+    await db.connect();
+    logToFile(`Connected to ${config.type} database`);
+
+    // Reload schema to match the new database
+    schemaInfo = await fs.readFile('schema.txt', 'utf8');
+    logToFile(`Schema reloaded: "${schemaInfo}"`);
+
+    // Clear caches for the new database
+    sqlCache.clear();
+    resultCache.clear();
+    logToFile('SQL and result caches cleared');
+  } catch (error: any) {
+    logToFile(`Failed to reload database or schema: ${error.message}`);
+    throw new Error('Failed to reload database or schema');
+  }
+}
 
 // Initialize MCP Server
 const server = new McpServer({
@@ -103,34 +103,34 @@ const aiProvider = createAIProvider();
 
 
 
-  async function executeQuery(query: string | object, mode: string, dbType: string): Promise<any[]> {
-    const cacheKey = JSON.stringify(query);
-    if (resultCache.has(cacheKey)) {
-      return resultCache.get(cacheKey)!;
-    }
-    if (!db) {
-      throw new Error('Database connection not initialized');
-    }
-    let rows: any[];
-    if (dbType === 'mongodb') {
-      if (typeof query !== 'object') throw new Error('MongoDB query must be an object');
-      rows = await db.query(query);
-    } else {
-      if (typeof query !== 'string') throw new Error('SQL query must be a string');
-      if (mode === 'search' && !query.trim().toUpperCase().startsWith('SELECT')) {
-        throw new Error('Only SELECT queries are allowed in Search Mode');
-      }
-      rows = await db.query(query);
-    }
-    resultCache.set(cacheKey, rows);
-    return rows;
+async function executeQuery(query: string | object, mode: string, dbType: string): Promise<any[]> {
+  const cacheKey = JSON.stringify(query);
+  if (resultCache.has(cacheKey)) {
+    return resultCache.get(cacheKey)!;
   }
+  if (!db) {
+    throw new Error('Database connection not initialized');
+  }
+  let rows: any[];
+  if (dbType === 'mongodb') {
+    if (typeof query !== 'object') throw new Error('MongoDB query must be an object');
+    rows = await db.query(query);
+  } else {
+    if (typeof query !== 'string') throw new Error('SQL query must be a string');
+    if (mode === 'search' && !query.trim().toUpperCase().startsWith('SELECT')) {
+      throw new Error('Only SELECT queries are allowed in Search Mode');
+    }
+    rows = await db.query(query);
+  }
+  resultCache.set(cacheKey, rows);
+  return rows;
+}
 
 
 // Define the "query_database" tool for MCP
 server.tool(
   "query_database",
-  { 
+  {
     query: z.string(),
     aiProvider: z.string()
   },
@@ -155,21 +155,21 @@ server.tool(
     // Dynamically create AI provider
     let aiProvider: AIProvider;
     if (aiProviderStr === 'gemini') {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
-        aiProvider = new GeminiAIProvider(apiKey);
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
+      aiProvider = new GeminiAIProvider(apiKey);
     } else if (aiProviderStr.startsWith('huggingface:')) {
-        const model = aiProviderStr.split(':')[1];
-        const apiKey = process.env.HUGGINGFACE_API_KEY;
-        if (!apiKey) throw new Error('HUGGINGFACE_API_KEY is not set');
-        aiProvider = new HuggingFaceAIProvider(apiKey, model);
+      const model = aiProviderStr.split(':')[1];
+      const apiKey = process.env.HUGGINGFACE_API_KEY;
+      if (!apiKey) throw new Error('HUGGINGFACE_API_KEY is not set');
+      aiProvider = new HuggingFaceAIProvider(apiKey, model);
     } else if (aiProviderStr.startsWith('novita:')) {
-        const model = aiProviderStr.split(':')[1];
-        const apiKey = process.env.HUGGINGFACE_API_KEY; // Reuse HF key, or use NOVITA_API_KEY if separate
-        if (!apiKey) throw new Error('HUGGINGFACE_API_KEY is not set');
-        aiProvider = new NovitaAIProvider(apiKey, model);
+      const model = aiProviderStr.split(':')[1];
+      const apiKey = process.env.HUGGINGFACE_API_KEY; // Reuse HF key, or use NOVITA_API_KEY if separate
+      if (!apiKey) throw new Error('HUGGINGFACE_API_KEY is not set');
+      aiProvider = new NovitaAIProvider(apiKey, model);
     } else {
-        throw new Error(`Unsupported AI provider: ${aiProviderStr}`);
+      throw new Error(`Unsupported AI provider: ${aiProviderStr}`);
     }
 
     logToFile(`Using AI provider: ${aiProviderStr}`);
@@ -177,15 +177,15 @@ server.tool(
     try {
       // Inside the try block:
       const query = await aiProvider.generateQuery({
-          schemaInfo: schemaInfo!,
-          mode,
-          userQuery: queryText,
-          dbType,
+        schemaInfo: schemaInfo!,
+        mode,
+        userQuery: queryText,
+        dbType,
       });
       const result = await executeQuery(query, mode, dbType);
       const explanation = await aiProvider.generateExplanation({
-          userQuery: queryText,
-          results: result,
+        userQuery: queryText,
+        results: result,
       });
       return {
         content: [{
@@ -214,7 +214,7 @@ server.tool(
 
 // Handle process cleanup
 process.on('exit', () => {
-    if (db) {
-      db.close().catch(error => logToFile(`Error closing DB: ${error}`));
-    }
-  });
+  if (db) {
+    db.close().catch(error => logToFile(`Error closing DB: ${error}`));
+  }
+});

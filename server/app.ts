@@ -11,14 +11,14 @@ interface QueryRequestBody {
 }
 
 const QueryToolSchema = z.object({
-    content: z.array(z.object({ text: z.string() })),
-    isError: z.boolean().optional()
-  });
+  content: z.array(z.object({ text: z.string() })),
+  isError: z.boolean().optional()
+});
 
 const app = express();
 
 // Proxy requests to server.ts on port 3001
-app.use('/api/load-db', createProxyMiddleware({ target: 'http://localhost:3001/api/load-db', changeOrigin: true,  logger: console }));
+app.use('/api/load-db', createProxyMiddleware({ target: 'http://localhost:3001/api/load-db', changeOrigin: true, logger: console }));
 app.use('/api/is-db-loaded', createProxyMiddleware({ target: 'http://localhost:3001/api/is-db-loaded', changeOrigin: true, logger: console }));
 
 app.use(express.json()); // Parse JSON request bodies
@@ -72,7 +72,7 @@ app.post('/api/query', async (req: any, res: any) => {
     });
     const duration = Date.now() - startTime;
     console.log(`Query "${query}" processed in ${duration}ms`);
-    
+
     const result = QueryToolSchema.parse(resultRaw);
     if (result.isError) {
       console.error(`Query error: ${result.content[0].text}`);

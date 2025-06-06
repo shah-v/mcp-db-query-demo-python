@@ -38,7 +38,7 @@ export class HuggingFaceAIProvider implements AIProvider {
             ? response.data[0].generated_text
             : JSON.stringify(response.data);
         logToFile(`HuggingFace API Response: ${JSON.stringify(text)}`);
-    
+
         let query: string | object;
         if (params.dbType === 'mongodb') {
             const match = text.match(/```json\n([\s\S]*?)\n```/);

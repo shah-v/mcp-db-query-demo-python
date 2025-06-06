@@ -24,7 +24,7 @@ export class GeminiAIProvider implements AIProvider {
         const result = await this.model.generateContent(prompt);
         const text = result.response.text();
         logToFile(`Gemini API Response: ${JSON.stringify(text)}`);
-    
+
         let query: string | object;
         if (params.dbType === 'mongodb') {
             const match = text.match(/```json\n([\s\S]*?)\n```/);
