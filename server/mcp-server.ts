@@ -132,10 +132,13 @@ server.tool(
   "query_database",
   {
     query: z.string(),
-    aiProvider: z.string()
+    aiProvider: z.string(),
+    includeQuery: z.boolean(),
+    includeExplanation: z.boolean(),
+    includeResults: z.boolean()
   },
   async (args) => {
-    const { query, aiProvider: aiProviderStr } = args;
+    const { query, aiProvider: aiProviderStr, includeQuery, includeExplanation, includeResults } = args;
     await ensureSchemaLoaded();
     try {
       await reloadDb();
@@ -175,22 +178,39 @@ server.tool(
     logToFile(`Using AI provider: ${aiProviderStr}`);
 
     try {
-      // Inside the try block:
-      const query = await aiProvider.generateQuery({
+      const generatedQuery = await aiProvider.generateQuery({
         schemaInfo: schemaInfo!,
         mode,
         userQuery: queryText,
         dbType,
       });
-      const result = await executeQuery(query, mode, dbType);
-      const explanation = await aiProvider.generateExplanation({
-        userQuery: queryText,
-        results: result,
-      });
+      let result: any[] | undefined;
+      if (includeResults) {
+        result = await executeQuery(generatedQuery, mode, dbType);
+      }
+      let explanation: string | null = null;
+      if (includeExplanation) {
+        explanation = includeResults
+          ? await aiProvider.generateExplanation({
+              userQuery: queryText,
+              results: result!,
+            })
+          : "Explanation not available without query results.";
+      }
+      const responseObj: { results?: any[]; query?: string | object; explanation?: string | null } = {};
+      if (includeQuery) {
+        responseObj.query = generatedQuery;
+      }
+      if (includeResults) {
+        responseObj.results = result;
+      }
+      if (includeExplanation) {
+        responseObj.explanation = explanation;
+      }
       return {
         content: [{
           type: "text",
-          text: JSON.stringify({ results: result, query: query, explanation })
+          text: JSON.stringify(responseObj)
         }]
       };
     } catch (error: any) {

@@ -59,8 +59,8 @@ connectWithRetry();
 
 // Handle /api/query requests using the persistent client
 app.post('/api/query', async (req: any, res: any) => {
-  const { query, aiProvider } = req.body;
-  console.log(`Received query: "${query}" with AI provider: "${aiProvider}"`);
+  const { query, aiProvider, includeQuery, includeExplanation, includeResults } = req.body;
+  console.log(`Received query: "${query}" with AI provider: "${aiProvider}", includeQuery: ${includeQuery}, includeExplanation: ${includeExplanation}, includeResults: ${includeResults}`);
   if (!isClientConnected) {
     return res.status(503).json({ error: 'MCP server not yet connected, please try again later' });
   }
@@ -68,7 +68,7 @@ app.post('/api/query', async (req: any, res: any) => {
     const startTime = Date.now();
     const resultRaw = await client.callTool({
       name: 'query_database',
-      arguments: { query, aiProvider },
+      arguments: { query, aiProvider, includeQuery, includeExplanation, includeResults },
     });
     const duration = Date.now() - startTime;
     console.log(`Query "${query}" processed in ${duration}ms`);

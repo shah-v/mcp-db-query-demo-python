@@ -60,6 +60,9 @@
     function App() {
       const [messages, setMessages] = useState([]);
       const [input, setInput] = useState('');
+      const [includeQuery, setIncludeQuery] = useState(true);
+      const [includeExplanation, setIncludeExplanation] = useState(true);
+      const [includeResults, setIncludeResults] = useState(true);
       const [isDbLoading, setIsDbLoading] = useState(false);
       const [isQueryLoading, setIsQueryLoading] = useState(false);
       const [isDbLoaded, setIsDbLoaded] = useState(false);
@@ -100,7 +103,11 @@
           alert('Please load the database first');
           return;
         }
-        const finalQuery = `${mode}: ${input}`; // Prepend mode prefix
+        if (!includeQuery && !includeExplanation && !includeResults) {
+          alert('Please select at least one: Generated Query, Explanation, or Query Results');
+          return;
+        }
+        const finalQuery = `${mode}: ${input}`;
         setMessages(prev => [...prev, { type: 'user', content: finalQuery }]);
         setInput('');
         setIsQueryLoading(true);
@@ -108,7 +115,13 @@
           const response = await fetchWithRetry('/api/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: finalQuery, aiProvider }),
+            body: JSON.stringify({
+              query: finalQuery,
+              aiProvider,
+              includeQuery,
+              includeExplanation,
+              includeResults
+            }),
           }, { enabled: false });
           const data = await response.json();
           if (response.ok) {
@@ -291,58 +304,68 @@
                         </div>
                       ) : (
                         <div>
-                          <h3 className="text-lg font-medium text-gray-700 mb-2">Generated Query</h3>
-                          <div className="bg-gray-800 text-green-400 p-4 rounded-lg font-mono text-sm overflow-x-auto mb-6">
-                            <p>
-                              {msg.content.query
-                                ? (typeof msg.content.query === 'string'
-                                  ? msg.content.query
-                                  : JSON.stringify(msg.content.query, null, 2))
-                                : 'No query generated'}
-                            </p>
-                          </div>
-                          <h3 className="text-lg font-medium text-gray-700 mb-2">Query Results</h3>
-                          <div className="border border-gray-200 rounded-lg overflow-hidden mb-6">
-                            {msg.content.results && msg.content.results.length > 0 ? (
-                              <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                  <tr>
-                                    {Object.keys(msg.content.results[0]).map((header, i) => (
-                                      <th
-                                        key={i}
-                                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                      >
-                                        {header}
-                                      </th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                  {msg.content.results.map((row, rowIndex) => (
-                                    <tr key={rowIndex}>
-                                      {Object.values(row).map((value, colIndex) => (
-                                        <td
-                                          key={colIndex}
-                                          className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
-                                        >
-                                          {value}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            ) : (
-                              <div className="p-8 text-center text-gray-500">
-                                <i className="fas fa-exclamation-triangle text-4xl mb-2 text-yellow-400"></i>
-                                <p>No results found.</p>
+                          {msg.content.query && (
+                            <>
+                              <h3 className="text-lg font-medium text-gray-700 mb-2">Generated Query</h3>
+                              <div className="bg-gray-800 text-green-400 p-4 rounded-lg font-mono text-sm overflow-x-auto mb-6">
+                                <p>
+                                  {typeof msg.content.query === 'string'
+                                    ? msg.content.query
+                                    : JSON.stringify(msg.content.query, null, 2)}
+                                </p>
                               </div>
-                            )}
-                          </div>
-                          <h3 className="text-lg font-medium text-gray-700 mb-2">Explanation</h3>
-                          <div className="bg-gray-50 p-4 rounded-lg">
-                            <p className="text-gray-800">{msg.content.explanation || 'No explanation provided'}</p>
-                          </div>
+                            </>
+                          )}
+                          {msg.content.results && (
+                            <>
+                              <h3 className="text-lg font-medium text-gray-700 mb-2">Query Results</h3>
+                              <div className="border border-gray-200 rounded-lg overflow-hidden mb-6">
+                                {msg.content.results.length > 0 ? (
+                                  <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                      <tr>
+                                        {Object.keys(msg.content.results[0]).map((header, i) => (
+                                          <th
+                                            key={i}
+                                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                          >
+                                            {header}
+                                          </th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                      {msg.content.results.map((row, rowIndex) => (
+                                        <tr key={rowIndex}>
+                                          {Object.values(row).map((value, colIndex) => (
+                                            <td
+                                              key={colIndex}
+                                              className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                                            >
+                                              {value}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                ) : (
+                                  <div className="p-8 text-center text-gray-500">
+                                    <i className="fas fa-exclamation-triangle text-4xl mb-2 text-yellow-400"></i>
+                                    <p>No results found.</p>
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+                          {msg.content.explanation && (
+                            <>
+                              <h3 className="text-lg font-medium text-gray-700 mb-2">Explanation</h3>
+                              <div className="bg-gray-50 p-4 rounded-lg">
+                                <p className="text-gray-800">{msg.content.explanation}</p>
+                              </div>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
@@ -416,6 +439,41 @@
                   <option value="huggingface:mistralai/Mixtral-8x7B-Instruct-v0.1">Hugging Face: Mistral</option>
                   <option value="novita:deepseek/deepseek-r1-turbo">Novita: DeepSeek</option>
                 </select>
+              </div>
+              <div className="mb-2">
+                <label className="text-sm text-gray-600 mr-2">
+                  <input
+                    type="checkbox"
+                    checked={includeQuery}
+                    onChange={(e) => setIncludeQuery(e.target.checked)}
+                    className="mr-1"
+                    disabled={includeQuery && !includeExplanation && !includeResults}
+                    title={includeQuery && !includeExplanation && !includeResults ? 'Cannot uncheck: at least one must be selected' : ''}
+                  />
+                  Include Generated Query
+                </label>
+                <label className="text-sm text-gray-600 mr-2">
+                  <input
+                    type="checkbox"
+                    checked={includeExplanation}
+                    onChange={(e) => setIncludeExplanation(e.target.checked)}
+                    className="mr-1"
+                    disabled={includeExplanation && !includeQuery && !includeResults}
+                    title={includeExplanation && !includeQuery && !includeResults ? 'Cannot uncheck: at least one must be selected' : ''}
+                  />
+                  Include Explanation
+                </label>
+                <label className="text-sm text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={includeResults}
+                    onChange={(e) => setIncludeResults(e.target.checked)}
+                    className="mr-1"
+                    disabled={includeResults && !includeQuery && !includeExplanation}
+                    title={includeResults && !includeQuery && !includeExplanation ? 'Cannot uncheck: at least one must be selected' : ''}
+                  />
+                  Include Query Results
+                </label>
               </div>
               <textarea
                 value={input}
