@@ -83,7 +83,7 @@
       useEffect(() => {
         const checkDbLoaded = async () => {
           try {
-            const response = await fetchWithRetry('/api/is-db-loaded');
+            const response = await fetchWithRetry('http://127.0.0.1:3001/api/is-db-loaded');
             const data = await response.json();
             if (data.loaded) {
               setIsDbLoaded(true);
@@ -155,7 +155,7 @@
             }
             body = JSON.stringify({ type: dbType, ...connectionDetails });
           }
-          const response = await fetchWithRetry('/api/load-db', {
+          const response = await fetchWithRetry('http://127.0.0.1:3001/api/load-db', {
             method: 'POST',
             body,
             headers: dbType !== 'sqlite' ? { 'Content-Type': 'application/json' } : undefined,

@@ -1,10 +1,13 @@
 from flask import Flask, request, jsonify, send_from_directory
-from mcp_sdk import Client, StdioClientTransport  # Hypothetical MCP Python SDK
+from mcp_sdk import Client, StdioClientTransport
 import os
 import json
 import asyncio
 
-app = Flask(__name__, static_folder='static')
+BASE_DIR   = os.path.dirname(__file__)  
+STATIC_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'static'))
+
+app = Flask(__name__,static_folder=STATIC_DIR,static_url_path='')
 
 # MCP Client Setup
 transport = StdioClientTransport(command='python', args=['mcp_server.py'])
