@@ -5,9 +5,15 @@ import sqlite3
 import pymongo
 import pyodbc
 from dotenv import load_dotenv
+from flask_cors import CORS
+import logging
 
 app = Flask(__name__)
+CORS(app)
 load_dotenv()
+
+logging.basicConfig(filename='api-server.log', level=logging.INFO, format='%(asctime)s - %(message)s')
+logger = logging.getLogger()
 
 schema_info = None
 
@@ -24,8 +30,7 @@ def create_database(config):
             f"DATABASE={config['database']};UID={config['user']};PWD={config['password']}"
         )
 
-async def generate_schema_info(db):
-    # Simplified schema generation (expand based on your database module)
+def generate_schema_info(db):
     if isinstance(db, sqlite3.Connection):
         cursor = db.cursor()
         cursor.execute("SELECT sql FROM sqlite_master WHERE type='table';")
@@ -38,14 +43,18 @@ async def generate_schema_info(db):
     return "Schema not implemented"
 
 @app.route('/api/load-db', methods=['POST'])
-async def load_db():
+def load_db():
     global schema_info
     try:
-        db_type = request.form.get('type') or request.json.get('type')
+        db_type = request.form.get('type') or (request.json.get('type') if request.json else None)
+        if not db_type:
+            return jsonify({'success': False, 'error': 'Database type not provided'}), 400
         config = {'type': db_type}
         
         if db_type == 'sqlite':
             file = request.files.get('dbFile')
+            logger.info(f"Received db_type: {db_type}")
+            logger.info(f"Received file: {file.filename if file else 'None'}")
             if not file:
                 return jsonify({'success': False, 'error': 'No file uploaded for SQLite'}), 400
             db_path = os.path.join('uploads', 'current.db')
@@ -66,7 +75,7 @@ async def load_db():
             return jsonify({'success': False, 'error': 'Unsupported database type'}), 400
         
         db = create_database(config)
-        schema_info = await generate_schema_info(db)
+        schema_info = generate_schema_info(db)
         with open('schema.txt', 'w') as f:
             f.write(schema_info)
         with open('db-config.txt', 'w') as f:

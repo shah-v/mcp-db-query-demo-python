@@ -31,32 +31,39 @@ def generate_query_prompt(params: dict) -> str:
     mode = params['mode']
     user_query = params['userQuery']
     db_type = params['dbType']
+    
     if db_type == 'mongodb':
         if mode == 'search':
             return f"""Given the schema: {schema_info}
-            Generate a MongoDB query object to search for: "{user_query}".
-            Use "find".
-            Example: "find users over 25" becomes:
-            ```json
-            {{ "collection": "users", "operation": "find", "filter": {{ "age": {{ "$gt": 25 }} }} }}
-            Return only the query object in a code block like that."""
+                    Generate a MongoDB query object to search for: "{user_query}".
+                    Use "find".
+                    Example: "find users over 25" becomes:
+                    ```json
+                    {{ "collection": "users", "operation": "find", "filter": {{ "age": {{ "$gt": 25 }} }} }}
+                    ```
+                    Return only the query object in a code block like that."""
+        else:
             return f"""Given the schema: {schema_info}
-            Generate a MongoDB query object to modify the database for: "{user_query}".
-            Use "insertOne", "updateOne", or "deleteOne".
-            Example: "add a user named John aged 30" becomes:
-            {{ "collection": "users", "operation": "insertOne", "document": {{ "name": "John", "age": 30 }} }}
-            Return only the query object in a code block like that."""
-            if mode == 'search':
+                    Generate a MongoDB query object to modify the database for: "{user_query}".
+                    Use "insertOne", "updateOne", or "deleteOne".
+                    Example: "add a user named John aged 30" becomes:
+                    {{ "collection": "users", "operation": "insertOne", "document": {{ "name": "John", "age": 30 }} }}
+                    Return only the query object in a code block like that."""
+    else:
+        if mode == 'search':
             return f"""Given the schema: {schema_info}
-            Generate a SQL SELECT query (using standard ANSI SQL) to answer the user's question: "{user_query}"
-            Return only the SQL query inside a code block like this:
-            SELECT ...;
-            No explanation, just the query."""
+                    Generate a SQL SELECT query (using standard ANSI SQL) to answer the user's question: "{user_query}"
+                    Return only the SQL query inside a code block like this:
+                    ```sql
+                    SELECT ...;
+                    ```
+                    No explanation, just the query."""
+        else:
             return f"""Given the schema: {schema_info}
-            Generate a SQL query (INSERT, UPDATE, or DELETE) to modify the database for: "{user_query}".
-            Example: "add a user named John aged 30" becomes:
-            INSERT INTO users (name, age) VALUES ('John', 30)
-            Return only the query in a code block like that."""
+                    Generate a SQL query (INSERT, UPDATE, or DELETE) to modify the database for: "{user_query}".
+                    Example: "add a user named John aged 30" becomes:
+                    INSERT INTO users (name, age) VALUES ('John', 30)
+                    Return only the query in a code block like that."""
 
 def generate_explanation_prompt(params: dict) -> str:
     user_query = params['userQuery']
@@ -92,6 +99,13 @@ async def ensure_schema_loaded():
             raise Exception('No database uploaded yet - please upload a database first')
         except Exception as e:
             raise
+
+class AIProvider:
+    async def generate_query(self, schema_info: str, mode: str, user_query: str, db_type: str) -> Union[str, dict]:
+        raise NotImplementedError
+    
+    async def generate_explanation(self, user_query: str, results: List[Any]) -> str:
+        raise NotImplementedError
 
 class HuggingFaceAIProvider(AIProvider):
     def __init__(self, api_key: str, model: str = 'mistralai/Mixtral-8x7B-Instruct-v0.1'):
@@ -242,13 +256,6 @@ async def execute_query(query: Union[str, dict], mode: str, db_type: str) -> Lis
     result_cache[cache_key] = rows
     return rows
 
-# AI Provider Factory (simplified)
-class AIProvider:
-    async def generate_query(self, schema_info: str, mode: str, user_query: str, db_type: str) -> Union[str, dict]:
-        raise NotImplementedError
-    
-    async def generate_explanation(self, user_query: str, results: List[Any]) -> str:
-        raise NotImplementedError
 
 class GeminiAIProvider(AIProvider):
     def __init__(self, api_key: str):
@@ -285,42 +292,63 @@ server = McpServer(name="Farming Database Server", version="1.0.0")
     }
 )
 async def query_database(args: Dict[str, Any]) -> Dict[str, Any]:
+    logger.info("Received query request")
     query, ai_provider_str, include_query, include_explanation, include_results = (
         args["query"], args["aiProvider"], args["includeQuery"], args["includeExplanation"], args["includeResults"]
     )
+    logger.info(f"Arguments: {args}")
+    logger.info("Processing query_database tool")
     
-    await ensure_schema_loaded()
+    try:
+        await ensure_schema_loaded()
+        logger.info("Schema loaded successfully")
+    except Exception as e:
+        logger.error(f"Failed to load schema: {e}")
+        return {"content": [{"type": "text", "text": json.dumps({"error": str(e)})}], "isError": True}
+    logger.info("Continuing after schema check")
+    
     try:
         await reload_db()
+        logger.info("Database reloaded successfully")
     except Exception as e:
-        logger.error(f'Failed to reload database: {e}')
-        return {"content": [{"type": "text", "text": f"Error: {e}"}], "isError": True}
+        logger.error(f"Failed to reload database: {e}")
+        return {"content": [{"type": "text", "text": json.dumps({"error": str(e)})}], "isError": True}
     
-    with open('db-config.txt', 'r') as f:
-        config = json.load(f)
-    db_type = config['type']
+    try:
+        with open('db-config.txt', 'r') as f:
+            config = json.load(f)
+        db_type = config['type']
+        logger.info(f"Database type: {db_type}")
+    except Exception as e:
+        logger.error(f"Failed to load db-config.txt: {e}")
+        return {"content": [{"type": "text", "text": json.dumps({"error": str(e)})}], "isError": True}
     
     user_query = query.strip()
     mode = 'modify' if user_query.lower().startswith('modify:') else 'search'
     query_text = re.sub(r'^(search|modify):', '', user_query, flags=re.IGNORECASE).strip()
     
     # AI Provider Selection
-    if ai_provider_str == 'gemini':
-        ai_provider = GeminiAIProvider(os.getenv('GEMINI_API_KEY'))
-    elif ai_provider_str.startswith('huggingface:'):
-        model = ai_provider_str.split(':')[1]
-        ai_provider = HuggingFaceAIProvider(os.getenv('HUGGINGFACE_API_KEY'), model)
-    elif ai_provider_str.startswith('novita:'):
-        model = ai_provider_str.split(':')[1]
-        ai_provider = NovitaAIProvider(os.getenv('HUGGINGFACE_API_KEY'), model)
-    else:
-        raise Exception(f'Unsupported AI provider: {ai_provider_str}')
-    
-    logger.info(f'Using AI provider: {ai_provider_str}')
+    try:
+        if ai_provider_str == 'gemini':
+            ai_provider = GeminiAIProvider(os.getenv('GEMINI_API_KEY'))
+        elif ai_provider_str.startswith('huggingface:'):
+            model = ai_provider_str.split(':')[1]
+            ai_provider = HuggingFaceAIProvider(os.getenv('HUGGINGFACE_API_KEY'), model)
+        elif ai_provider_str.startswith('novita:'):
+            model = ai_provider_str.split(':')[1]
+            ai_provider = NovitaAIProvider(os.getenv('HUGGINGFACE_API_KEY'), model)
+        else:
+            raise Exception(f'Unsupported AI provider: {ai_provider_str}')
+        logger.info(f"AI provider initialized: {ai_provider_str}")
+    except Exception as e:
+        logger.error(f"Failed to initialize AI provider: {e}")
+        return {"content": [{"type": "text", "text": json.dumps({"error": str(e)})}], "isError": True}
     
     try:
         generated_query = await ai_provider.generate_query(schema_info, mode, query_text, db_type)
+        logger.info(f"Generated query: {generated_query}")
         result = await execute_query(generated_query, mode, db_type) if include_results else None
+        logger.info(f"Query result: {result}")
         explanation = (
             await ai_provider.generate_explanation(query_text, result) if include_explanation and include_results
             else "Explanation not available without query results." if include_explanation else None
@@ -336,13 +364,15 @@ async def query_database(args: Dict[str, Any]) -> Dict[str, Any]:
         
         return {"content": [{"type": "text", "text": json.dumps(response)}]}
     except Exception as e:
-        return {"content": [{"type": "text", "text": f"Error: {e}"}], "isError": True}
+        error_response = {"error": str(e)}
+        return {"content": [{"type": "text", "text": json.dumps(error_response)}], "isError": True}
 
 # Start the server
 async def main():
+    logger.info("Starting MCP server")
     await load_schema()
     transport = StdioServerTransport()
-    await server.connect(transport)
+    await transport.run_server(server)
     logger.info('MCP server running with StdioServerTransport')
 
 if __name__ == "__main__":
